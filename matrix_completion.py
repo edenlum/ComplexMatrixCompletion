@@ -10,7 +10,7 @@ from jax import grad, jit, vmap
 from jax import random
 import optax
 from jax import device_put
-
+import os
 
 from matrix_completion_utils import init_network_params, init_network_params_v2, Data
 
@@ -60,9 +60,9 @@ def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
         grads = jax.grad(loss)(params, observations_gt, indices)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
-        
+        train_loss = loss(params, observations_gt, indices)
         val_loss = loss(params, observations_gt, indices=np.arange(observations_gt.size))
-        return params, val_loss, opt_state
+        return params, train_loss, val_loss, opt_state
  
     loss_arr = []
     optimizer = optax.adam(step_size)
@@ -77,8 +77,8 @@ def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
     opt_state = optimizer.init(params)
 
     for epoch in range(num_epochs):
-        params, val_loss, opt_state = run_epoch(params, opt_state)
-        loss_arr.append(val_loss)
+        params, train_loss, val_loss, opt_state = run_epoch(params, opt_state)
+        loss_arr.append(train_loss)
         if epoch % 1000 == 0:
             print('Epoch: {}, Train loss: {}, Test loss: {}'.format(epoch, loss_arr[-1], val_loss))
     return loss_arr, params
@@ -97,6 +97,9 @@ def main():
     # dataset = 'cifar10'
     # for activation_type in activation_type_arr:
     # activation_fn = relu if activation_type == 'relu' else lambda x: x
+    results_dir = "matrix_completion_results"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
     for step_size in step_size_arr:
         for init_scale in init_scale_arr:
             for mode in ['real', 'complex']:
@@ -108,12 +111,12 @@ def main():
         plt.legend()
         # plt.title('activation_{}_step_size_{}'.format(activation_type, step_size))
         plt.title('step_size_{}'.format(step_size))
-        plt.savefig('matrix_completion_results/step_size_{}.png'.format(step_size))
+        plt.savefig('{}/step_size_{}.png'.format(results_dir, step_size))
         plt.close()
 
 def run():
     loss_arr, params = train(
-        init_scale=1e-4, step_size=1e-4, mode='real', n_train=500, n=50, rank=5
+        init_scale=1e-4, step_size=1e-4, mode='real', n_train=1500, n=50, rank=5
     )
     # final_e2e = predict(params)
     S = get_svd(params)
@@ -125,5 +128,5 @@ def run():
     print('Final norm: {}'.format(nrm))
 
 if __name__=='__main__':
-    run()
-    # main()
+    # run()
+    main()
