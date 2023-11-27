@@ -61,7 +61,6 @@ def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         
-        loss_arr.append(loss(params, observations_gt, indices=np.arange(observations_gt.size)))
         val_loss = loss(params, observations_gt, indices=np.arange(observations_gt.size))
         return params, val_loss, opt_state
  
@@ -79,6 +78,7 @@ def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
 
     for epoch in range(num_epochs):
         params, val_loss, opt_state = run_epoch(params, opt_state)
+        loss_arr.append(val_loss)
         if epoch % 1000 == 0:
             print('Epoch: {}, Train loss: {}, Test loss: {}'.format(epoch, loss_arr[-1], val_loss))
     return loss_arr, params
