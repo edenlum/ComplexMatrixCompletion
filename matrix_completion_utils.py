@@ -60,7 +60,7 @@ class Data:
         print(observations)
         # print('jnp.sqrt((observations**2).mean()): {}'.format(jnp.sqrt((observations**2).mean())))
         # assert 0.8 <= jnp.sqrt((observations**2).mean()) <= 1.2
-        return observations
+        return self.w_gt, indices
         # self.w_gt.at[indices]
         # assert 0.8 <= ys_.pow(2).mean().sqrt() <= 1.2
         # return [(us, vs), ys_]
