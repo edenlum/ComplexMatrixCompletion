@@ -5,7 +5,7 @@ from jax import random
 
 def random_layer_params_complex(m, n, key, scale):
     w_real_key, w_image_key, b_real_key, b_image_key = random.split(key, num=4)
-    return scale * random.normal(w_real_key, (n, m)) + 1j * scale * random.normal(w_image_key, (n, m)), scale * random.normal(b_real_key, (n,)) + 1j * scale * random.normal(b_real_key, (n,))
+    return scale * random.normal(w_real_key, (n, m)) + 1j * scale * random.normal(w_image_key, (n, m)), scale * random.normal(b_real_key, (n,)) + 1j * scale * random.normal(b_image_key, (n,))
 
 def random_layer_params_real(m, n, key, scale):
     w_key, b_key = random.split(key)
