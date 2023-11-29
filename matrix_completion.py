@@ -11,6 +11,7 @@ from jax import random
 import optax
 from jax import device_put
 import os
+import wandb
 
 from matrix_completion_utils import init_network_params, init_network_params_v2, Data
 
@@ -42,6 +43,12 @@ def get_svd(params):
 def get_norm(params):
     e2e = predict(params)
     return jnp.linalg.norm(e2e, 'fro')
+
+def calculate_effective_rank(params):
+    S = get_svd(params)
+    normalized_singular_values = S / jnp.sum(S)
+    effective_rank = jnp.exp(-jnp.sum(normalized_singular_values * jnp.log(normalized_singular_values)))
+    return effective_rank
 
 def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
     params = init_network_params_v2([n, n, n, n], random.PRNGKey(0), scale=init_scale, mode=mode)
@@ -75,12 +82,31 @@ def train(init_scale, step_size, mode, n_train, n, rank, num_epochs=10000):
     print('initial norm: {}\n'.format(nrm))
     
     opt_state = optimizer.init(params)
+    wandb.init(
+        project="ComplexMatrixCompletion",
+        name=f"experiment_{init_scale}_{step_size}_{mode}", 
+        config={
+            "init_scale": init_scale,
+            "step_size": step_size,
+            "mode": mode,
+            "n_train": n_train,
+            "matrix_size": n,
+            "rank": rank,
+            "depth": len(params.keys())
+        }
+    )
 
     for epoch in range(num_epochs):
         params, train_loss, val_loss, opt_state = run_epoch(params, opt_state)
         loss_arr.append(train_loss)
+        eff_rank = calculate_effective_rank(params)
+        wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "effective_rank": eff_rank})
+
         if epoch % 1000 == 0:
             print('Epoch: {}, Train loss: {}, Test loss: {}'.format(epoch, loss_arr[-1], val_loss))
+    
+    wandb.finish()
+
     return loss_arr, params
 
 def main():
