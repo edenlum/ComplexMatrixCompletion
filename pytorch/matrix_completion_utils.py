@@ -4,17 +4,26 @@ from torch import nn
 import random
 
 
+def start_direction(depth, size):
+    real = np.cos((np.pi/2) / depth)
+    imag = np.sin((np.pi/2) / depth)
+    return torch.eye(size) * real, torch.eye(size) * imag
+
 class MatrixMultiplier(nn.Module):
-    def __init__(self, depth, size, mode, init_scale):
+    def __init__(self, depth, size, mode, init_scale, smart_init=True):
         super(MatrixMultiplier, self).__init__()
         self.depth = depth
         self.size = size
-
-        self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale) for _ in range(depth)])
+        noise = torch.randn(size, size) * init_scale
+        if mode=="complex" and smart_init:
+            real, imag = start_direction(depth, size)
+        else:
+            real, imag = 0, 0
+        self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
         if mode=='real':
             self.imag_matrices = [torch.zeros(size, size) for _ in range(depth)]
         else:
-            self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale) for _ in range(depth)])
+            self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
 
     def forward(self):
         real_e2e = self.real_matrices[0]
