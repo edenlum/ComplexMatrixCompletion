@@ -30,28 +30,27 @@ class MatrixMultiplier(nn.Module):
         imag_e2e = self.imag_matrices[0]
 
         for real, imag in zip(self.real_matrices[1:], self.imag_matrices[1:]):
-            real_e2e, imag_e2e = self.complex_matmul(real, imag, real_e2e, imag_e2e)
+            real_e2e, imag_e2e = complex_matmul(real, imag, real_e2e, imag_e2e)
 
         return real_e2e
 
-    @staticmethod
-    def complex_matmul(real1, imag1, real2, imag2):
-        real = torch.matmul(real1, real2) - torch.matmul(imag1, imag2)
-        imag = torch.matmul(real1, imag2) + torch.matmul(imag1, real2)
-        return real, imag
-    
-    def svd(self):
-        return torch.svd(self.forward())
-    
-    def norm(self):
-        return torch.norm(self.forward())
-    
-    def effective_rank(self):
-        V, S, U = self.svd()
-        # Effective Rank
-        normalized_singular_values = S / torch.sum(S)
-        effective_rank = torch.exp(-torch.sum(normalized_singular_values * torch.log(normalized_singular_values)))
-        return effective_rank.item()
+    def calc_real_parts(self):
+        a, c = self.real_matrices
+        b, d = self.imag_matrices
+        return [torch.matmul(a, c), -torch.matmul(b, d)]
+
+
+def complex_matmul(real1, imag1, real2, imag2):
+    real = torch.matmul(real1, real2) - torch.matmul(imag1, imag2)
+    imag = torch.matmul(real1, imag2) + torch.matmul(imag1, real2)
+    return real, imag
+
+def effective_rank(mat):
+    V, S, U = torch.svd(mat)
+    # Effective Rank
+    normalized_singular_values = S / torch.sum(S)
+    effective_rank = torch.exp(-torch.sum(normalized_singular_values * torch.log(normalized_singular_values)))
+    return effective_rank.item()
 
 
 class Data:
