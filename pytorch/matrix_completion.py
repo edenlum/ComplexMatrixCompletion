@@ -6,10 +6,15 @@ import itertools
 
 from matrix_completion_utils import MatrixMultiplier, Data, effective_rank
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 def train(init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, smart_init=True):
     mm = MatrixMultiplier(depth, n, mode, init_scale, smart_init)
     dataObj = Data(n=n, rank=rank)
     observations_gt, indices = dataObj.generate_observations(n_train)
+    
+    mm.to(device)
+    observations_gt = observations_gt.to(device)
 
     criterion = nn.MSELoss()
     optimizer = optim.SGD(mm.parameters(), lr=step_size)

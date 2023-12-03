@@ -14,23 +14,23 @@ class MatrixMultiplier(nn.Module):
         super(MatrixMultiplier, self).__init__()
         self.depth = depth
         self.size = size
-        noise = torch.randn(size, size) * init_scale
+        self.mode = mode
         if mode=="complex" and smart_init:
             real, imag = start_direction(depth, size)
         else:
             real, imag = 0, 0
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
-        if mode=='real':
-            self.imag_matrices = [torch.zeros(size, size) for _ in range(depth)]
-        else:
-            self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
+        self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
 
     def forward(self):
         real_e2e = self.real_matrices[0]
         imag_e2e = self.imag_matrices[0]
 
         for real, imag in zip(self.real_matrices[1:], self.imag_matrices[1:]):
-            real_e2e, imag_e2e = complex_matmul(real, imag, real_e2e, imag_e2e)
+            if self.mode == "real":
+                real_e2e = torch.matmul(real, real_e2e)
+            else:
+                real_e2e, imag_e2e = complex_matmul(real, imag, real_e2e, imag_e2e)
 
         return real_e2e
 
@@ -41,6 +41,7 @@ class MatrixMultiplier(nn.Module):
 
 
 def complex_matmul(real1, imag1, real2, imag2):
+    print(real1.device, real2.device, imag1.device, imag2.device)
     real = torch.matmul(real1, real2) - torch.matmul(imag1, imag2)
     imag = torch.matmul(real1, imag2) + torch.matmul(imag1, real2)
     return real, imag
