@@ -21,30 +21,51 @@ class MatrixMultiplier(nn.Module):
             real, imag = 0, 0
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
         self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
-
+        self.matrices = list(zip(self.real_matrices, self.imag_matrices)) if mode=="complex" else self.real_matrices
+    
     def forward(self):
-        real_e2e = self.real_matrices[0]
-        imag_e2e = self.imag_matrices[0]
+        w_e2e = self.matrices[0]
 
-        for real, imag in zip(self.real_matrices[1:], self.imag_matrices[1:]):
-            if self.mode == "real":
-                real_e2e = torch.matmul(real, real_e2e)
-            else:
-                real_e2e, imag_e2e = complex_matmul(real, imag, real_e2e, imag_e2e)
+        for w in self.matrices[1:]:
+            w_e2e = complex_matmul(w, w_e2e)
 
-        return real_e2e
+        # real, imag = start_direction(self.depth, self.size)
+        # n1_re, n1_im, n2_re, n2_im = self.matrices[0][0] - real, self.matrices[0][1] - imag, self.matrices[-1][0] - real, self.matrices[-1][1] - imag
+        # w_e2e = (w_e2e[0] - 1/np.sqrt(2) * (n1_re - n1_im + n2_re - n2_im), w_e2e[1])
+            
+        return w_e2e[0] if self.mode == "complex" else w_e2e
 
     def calc_real_parts(self):
         a, c = self.real_matrices
         b, d = self.imag_matrices
         return [torch.matmul(a, c), -torch.matmul(b, d)]
 
+    def calc_balanced(self):
+        balanced = []
+        for x, y in zip(self.matrices[:-1], self.matrices[1:]):
+            xxT = complex_matmul(x, conjugate_transpose(x))
+            yTy = complex_matmul(conjugate_transpose(y), y)
+            if self.mode == "complex":
+                balanced.append(torch.norm(xxT[0] - yTy[0]))
+            else:
+                balanced.append(torch.norm(xxT - yTy))
+        return balanced
 
-def complex_matmul(real1, imag1, real2, imag2):
-    print(real1.device, real2.device, imag1.device, imag2.device)
-    real = torch.matmul(real1, real2) - torch.matmul(imag1, imag2)
-    imag = torch.matmul(real1, imag2) + torch.matmul(imag1, real2)
-    return real, imag
+
+def conjugate_transpose(w):
+    if isinstance(w, tuple):
+        return w[0].T, -w[1].T
+    return w.T
+    
+def complex_matmul(w1, w2):
+    if isinstance(w1, tuple):
+        real1, imag1 = w1
+        real2, imag2 = w2
+        real = torch.matmul(real1, real2) - torch.matmul(imag1, imag2)
+        imag = torch.matmul(real1, imag2) + torch.matmul(imag1, real2)
+        return real, imag
+    else:
+        return torch.matmul(w1, w2)
 
 def effective_rank(mat):
     V, S, U = torch.svd(mat)

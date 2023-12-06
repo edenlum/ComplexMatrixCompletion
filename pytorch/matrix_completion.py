@@ -20,6 +20,7 @@ def train(init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, sm
     optimizer = optim.SGD(mm.parameters(), lr=step_size)
 
     singular_values_list = []
+    balanced_diff_list = []
     for epoch in range(epochs):
         optimizer.zero_grad()
 
@@ -35,6 +36,7 @@ def train(init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, sm
         if epoch % 10 == 0:
             _, S, _ = torch.svd(pred)
             singular_values_list.append(S.tolist())
+            balanced_diff_list.append(mm.calc_balanced())
             eff_rank = effective_rank(pred)
 
             # for debugging 2 layers only
@@ -52,11 +54,19 @@ def train(init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, sm
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.2f}, Val Loss: {val_loss.item():.2f}')
 
     
-    wandb.log({"singular_values" : wandb.plot.line_series(
-                       xs=list(range(epochs//10)), 
-                       ys=list(zip(*singular_values_list)),
-                       title="Singular Values",
-                       xname="epoch/10")})
+    wandb.log({
+        "singular_values" : wandb.plot.line_series(
+                      xs=list(range(epochs//10)), 
+                      ys=list(zip(*singular_values_list)),
+                      title="Singular Values",
+                      xname="epoch/10"
+        ),
+        "balanced_diff" : wandb.plot.line_series(
+                      xs=list(range(epochs//10)),
+                      ys=list(zip(*balanced_diff_list)),
+                      title="Balanced Difference",
+                      xname="epoch/10"
+    )})
 
     print("Training complete")
 
@@ -74,14 +84,14 @@ def experiments(kwargs):
 def main():
     np.random.seed(1)
     for i, kwargs in enumerate(experiments({
-            "init_scale":    [1e-2, 1e-3],
+            "init_scale":      [1e-2, 5e-4],
             "step_size":       [5e-2, 1e-2],
             "mode":            ['complex'],
             "n_train":         [200],
             "n":               [20],
             "rank":            [5],
             "depth":           [2],
-            "smart_init":      [True, False]
+            "smart_init":      [True]
     })):
         print('#'*100 + f"\n{kwargs}\n" + "#"*100)
         wandb.init(
