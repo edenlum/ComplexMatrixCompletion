@@ -4,19 +4,19 @@ from torch import nn
 import random
 
 
-def start_direction(depth, size):
+def start_direction(depth, size, complex_init_scale):
     real = np.cos((np.pi/2) / depth)
     imag = np.sin((np.pi/2) / depth)
-    return torch.eye(size) * real, torch.eye(size) * imag
+    return torch.eye(size) * real * complex_init_scale, torch.eye(size) * imag * complex_init_scale
 
 class MatrixMultiplier(nn.Module):
-    def __init__(self, depth, size, mode, init_scale, smart_init=True):
+    def __init__(self, depth, size, mode, init_scale, complex_init_scale, smart_init=True):
         super(MatrixMultiplier, self).__init__()
         self.depth = depth
         self.size = size
         self.mode = mode
         if mode=="complex" and smart_init:
-            real, imag = start_direction(depth, size)
+            real, imag = start_direction(depth, size, complex_init_scale)
         else:
             real, imag = 0, 0
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])

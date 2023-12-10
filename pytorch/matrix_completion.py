@@ -8,8 +8,8 @@ from matrix_completion_utils import MatrixMultiplier, Data, effective_rank
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, smart_init=True):
-    mm = MatrixMultiplier(depth, n, mode, init_scale, smart_init)
+def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, depth, epochs=30001, smart_init=True):
+    mm = MatrixMultiplier(depth, n, mode, init_scale, complex_init_scale, smart_init)
     dataObj = Data(n=n, rank=rank)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
@@ -84,20 +84,22 @@ def experiments(kwargs):
 def main():
     np.random.seed(1)
     for i, kwargs in enumerate(experiments({
-            "init_scale":      [1e-2, 5e-4],
-            "step_size":       [5e-2, 1e-2],
-            "mode":            ['complex'],
-            "n_train":         [200],
-            "n":               [20],
-            "rank":            [5],
-            "depth":           [2],
-            "smart_init":      [True]
+            "init_scale":           [1e-4],
+            "complex_init_scale":   [0.1],
+            "step_size":            [5e-2, 1e-1],
+            "mode":                 ['complex'],
+            "n_train":              [200],
+            "n":                    [20],
+            "rank":                 [5],
+            "depth":                [2],
+            "smart_init":           [True],
     })):
         print('#'*100 + f"\n{kwargs}\n" + "#"*100)
         wandb.init(
             project="ComplexMatrixCompletion",
-            entity="complex-team",
-            name=f"experiment-{i}", 
+            # entity="complex-team",
+            # name=f"experiment-{i}",
+            name="mode_{}_initscale_{}_alphascale_{}_lr_{}".format(kwargs['mode'], kwargs['init_scale'], kwargs['complex_init_scale'], kwargs['step_size']),
             config=kwargs
         )
         train(**kwargs)
