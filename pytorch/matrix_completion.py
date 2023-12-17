@@ -8,7 +8,7 @@ from matrix_completion_utils import MatrixMultiplier, Data, effective_rank
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, depth, epochs=30001, smart_init=True):
+def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, depth, epochs=10001, smart_init=True):
     mm = MatrixMultiplier(depth, n, mode, init_scale, complex_init_scale, smart_init)
     dataObj = Data(n=n, rank=rank)
     observations_gt, indices = dataObj.generate_observations(n_train)
@@ -39,16 +39,17 @@ def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, dep
             balanced_diff_list.append(mm.calc_balanced())
             eff_rank = effective_rank(pred)
 
-            # for debugging 2 layers only
-            real_parts = mm.calc_real_parts()
-            eff_rank_parts = [effective_rank(p) for p in real_parts]
+            # # for debugging 2 layers only
+            # real_parts = mm.calc_real_parts()
+            # eff_rank_parts = [effective_rank(p) for p in real_parts]
             wandb.log({
               "epoch": epoch, 
               "train_loss": train_loss, 
               "val_loss": val_loss, 
               "effective_rank": eff_rank,
-              "effective_rank_ac": eff_rank_parts[0],
-              "effective_rank_bd": eff_rank_parts[1]})
+            #   "effective_rank_ac": eff_rank_parts[0],
+            #   "effective_rank_bd": eff_rank_parts[1]
+            })
 
         if epoch % 1000 == 0:
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.2f}, Val Loss: {val_loss.item():.2f}')
@@ -82,28 +83,36 @@ def experiments(kwargs):
         yield dict(zip(arg_names, values))
 
 def main():
-    np.random.seed(1)
-    for i, kwargs in enumerate(experiments({
-            "init_scale":           [1e-4],
-            "complex_init_scale":   [0.1],
-            "step_size":            [5e-2, 1e-1],
-            "mode":                 ['complex'],
-            "n_train":              [200],
-            "n":                    [20],
-            "rank":                 [5],
-            "depth":                [2],
-            "smart_init":           [True],
-    })):
-        print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-        wandb.init(
-            project="ComplexMatrixCompletion",
-            # entity="complex-team",
-            # name=f"experiment-{i}",
-            name="mode_{}_initscale_{}_alphascale_{}_lr_{}".format(kwargs['mode'], kwargs['init_scale'], kwargs['complex_init_scale'], kwargs['step_size']),
-            config=kwargs
-        )
-        train(**kwargs)
-        wandb.finish()
+    for j in range(5):
+        np.random.seed(j)
+        for i, kwargs in enumerate(experiments({
+                "init_scale":           [0.1],
+                "complex_init_scale":   [0.0],
+                "step_size":            [1e-1],
+                "mode":                 ['real'],
+                "n_train":              [200],
+                "n":                    [20],
+                "rank":                 [5],
+                "depth":                [4],
+                "smart_init":           [False],
+        })):
+            print('#'*100 + f"\n{kwargs}\n" + "#"*100)
+            if kwargs['smart_init'] and kwargs['mode'] == 'complex' and kwargs['init_scale'] == 0.0:
+                exp_name = "rnd_init_{}_complex_diaginit-initscale_{}_lr_{}_depth_{}".format(j, kwargs['complex_init_scale'], kwargs['step_size'], kwargs['depth'])
+            elif kwargs['mode'] == 'real' and kwargs['init_scale'] > 0.0 and kwargs['complex_init_scale'] == 0.0:
+                exp_name = "rnd_init_{}_real-initscale_{}_lr_{}_depth_{}".format(j, kwargs['init_scale'], kwargs['step_size'], kwargs['depth'])
+            else:
+                raise ValueError('Testing only real vs complex with diagonal init.')
+
+            wandb.init(
+                project="ComplexMatrixCompletion",
+                # entity="complex-team",
+                # name=f"experiment-{i}",
+                name=exp_name,
+                config=kwargs
+            )
+            train(**kwargs)
+            wandb.finish()
 
 if __name__=='__main__':
     main()
