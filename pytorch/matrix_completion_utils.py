@@ -4,10 +4,21 @@ from torch import nn
 import random
 
 
-def start_direction(depth, size, complex_init_scale):
+def start_direction(depth, size, complex_init_scale, mode):
     real = np.cos((np.pi/2) / depth)
     imag = np.sin((np.pi/2) / depth)
-    return torch.eye(size) * real * complex_init_scale, torch.eye(size) * imag * complex_init_scale
+    complex_init_scale = calc_init_scale(depth, 1, complex_init_scale, mode)
+    if mode == complex:
+        return torch.eye(size) * real * complex_init_scale, torch.eye(size) * imag * complex_init_scale
+    else:
+        return torch.eye(size) * complex_init_scale, 0
+
+def calc_init_scale(depth, n, e2e_scale, mode):
+    # end to end scale = init_scale ^ depth * sqrt(n) ^ (depth - 1)
+    # if complex, then there is another sqrt(2) for every multiplication (i.e sqrt(2)^(depth-1))
+    n = n if mode == "real" else 2*n
+    init_scale = (e2e_scale / ((n**(1/2)) ** (depth - 1)))**(1/depth)
+    return init_scale
 
 class MatrixMultiplier(nn.Module):
     def __init__(self, depth, size, mode, init_scale, complex_init_scale, smart_init=True):
@@ -15,10 +26,11 @@ class MatrixMultiplier(nn.Module):
         self.depth = depth
         self.size = size
         self.mode = mode
-        if mode=="complex" and smart_init:
-            real, imag = start_direction(depth, size, complex_init_scale)
+        if smart_init:
+            real, imag = start_direction(depth, size, complex_init_scale, mode)
         else:
             real, imag = 0, 0
+        init_scale = calc_init_scale(depth, size, init_scale, mode)
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
         self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
         self.matrices = list(zip(self.real_matrices, self.imag_matrices)) if mode=="complex" else self.real_matrices
