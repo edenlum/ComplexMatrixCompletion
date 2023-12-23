@@ -36,7 +36,7 @@ def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, dep
         optimizer.step()
         if epoch % 10 == 0:
             _, S, _ = torch.svd(pred)
-            singular_values_list.append(S.tolist())
+            singular_values_list.append(S.tolist()[:10])
             balanced_diff_list.append(mm.calc_balanced())
             eff_rank = effective_rank(pred)
 
@@ -46,6 +46,7 @@ def train(init_scale, complex_init_scale, step_size, mode, n_train, n, rank, dep
               "val_loss": val_loss, 
               "effective_rank": eff_rank,
               "standard_deviation": torch.std(pred).item(),
+              "fro_norm/size": torch.norm(pred).item()/n
               })
 
         if epoch % 1000 == 0:
@@ -86,10 +87,10 @@ def main():
             "complex_init_scale":   [0.001],
             "step_size":            [0.05],
             "mode":                 ['real'],
-            "n_train":              [200],
-            "n":                    [20],
-            "rank":                 [3],
-            "depth":                [2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "n_train":              [2000],
+            "n":                    [100],
+            "rank":                 [5],
+            "depth":                [4],
             "smart_init":           [True],
     })):
         print('#'*100 + f"\n{kwargs}\n" + "#"*100)
