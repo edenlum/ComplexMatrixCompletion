@@ -21,6 +21,7 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
     mm.to(device)
     observations_gt = observations_gt.to(device)
 
+    wandb.watch(mm)
     criterion = nn.MSELoss()
     # optimizer = optim.SGD(mm.parameters(), lr=step_size)
     optimizer = optim.SGD(mm.parameters(), lr=step_size)
@@ -41,24 +42,31 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
         train_loss.backward()
         optimizer.step()
         if epoch % 10 == 0:
+            _, S, _ = torch.svd(pred)
+            singular_values_list.append(S.tolist()[:10])
+            balanced_diff_list.append(mm.calc_balanced())
             eff_rank = effective_rank(pred)
             if use_wandb:
                 _, S, _ = torch.svd(pred)
-                singular_values_list.append(S.tolist())
+                singular_values_list.append(S.tolist()[:10])
                 balanced_diff_list.append(mm.calc_balanced())
 
                 wandb.log({
-                "epoch": epoch, 
-                "train_loss": train_loss, 
-                "val_loss": val_loss, 
-                "effective_rank": eff_rank,
-                })
+                  "epoch": epoch, 
+                  "train_loss": train_loss, 
+                  "val_loss": val_loss, 
+                  "effective_rank": eff_rank,
+                  "standard_deviation": torch.std(pred).item(),
+                  "fro_norm/size": torch.norm(pred).item()/n
+                  })
             else:
                 # log all relevant variable.
                 for var in ['train_loss', 'val_loss']:
                     df_dict[var].append(eval(var).item())
                 df_dict['eff_rank'].append(eff_rank)
-
+                df_dict['standard_deviation'].append(torch.std(pred).item()),
+                df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
+      
         if epoch % 100 == 0:
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.2f}, Val Loss: {val_loss.item():.2f}')
 
@@ -95,11 +103,8 @@ def main():
     for j in np.arange(1):
         for i, kwargs in enumerate(experiments({
                 "init_scale":           [0.0],
-                # "diag_init_scale":      [1e-3, 5e-3, 1e-2, 5e-2, 1e-1],
                 "diag_init_scale":      [1e-1],
-                # "step_size":            [5e-2, 1e-1, 5e-1],
                 "step_size":            [5e-1],
-                # "step_size":            [5e-1],
                 "mode":                 ['real'],
                 "n_train":              [2000],
                 "n":                    [100],
