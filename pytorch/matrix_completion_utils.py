@@ -95,14 +95,14 @@ def parse_results(directory_path, diag_init):
     
     return results
 
-def start_direction(depth, size, complex_init_scale, mode):
+def start_direction(depth, size, diag_init_scale, mode):
     real = np.cos((np.pi/2) / depth)
     imag = np.sin((np.pi/2) / depth)
-    complex_init_scale = calc_init_scale(depth, size, complex_init_scale, mode, diag=True)
+    diag_init_scale = calc_init_scale(depth, size, diag_init_scale, mode, diag=True)
     if mode == "complex":
-        return torch.eye(size) * real * complex_init_scale, torch.eye(size) * imag * complex_init_scale
+        return torch.eye(size) * real * diag_init_scale, torch.eye(size) * imag * diag_init_scale
     else:
-        return torch.eye(size) * complex_init_scale, 0
+        return torch.eye(size) * diag_init_scale, 0
 
 def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
     # end to end scale = init_scale ^ depth * sqrt(n) ^ (depth - 1)
@@ -200,7 +200,6 @@ class Data:
 
     def generate_observations(self, n_examples):
         indices = np.random.choice(self.n*self.n, size=(n_examples,), replace=False)
-        return self.w_gt, indices
         return self.w_gt, indices
     
 def main():
