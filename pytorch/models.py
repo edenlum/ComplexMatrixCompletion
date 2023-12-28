@@ -44,14 +44,14 @@ class MatrixMultiplier(nn.Module):
 
 class QuasiComplex(MatrixMultiplier):
     def __init__(self, *args, **kwargs):
-        if kwargs.get('mode') != 'complex':
+        if args[2] != 'complex':
             raise ValueError("Mode must be 'complex' in QuasiComplex")
         super().__init__(*args, **kwargs)
 
     def forward(self):
         real_e2e, imag_e2e = self.matrices[0]
 
-        for real, imag in self.real_matrices[1:]:
+        for real, imag in self.matrices[1:]:
             real_e2e = torch.matmul(real, real_e2e)
             imag_e2e = torch.matmul(imag, imag_e2e)
 
