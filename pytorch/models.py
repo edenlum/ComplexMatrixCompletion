@@ -44,7 +44,9 @@ class MatrixMultiplier(nn.Module):
 
 class QuasiComplex(MatrixMultiplier):
     def __init__(self, *args, **kwargs):
-        super().__init__(mode='complex', *args, **kwargs)
+        if kwargs.get('mode') != 'complex':
+            raise ValueError("Mode must be 'complex' in QuasiComplex")
+        super().__init__(*args, **kwargs)
 
     def forward(self):
         real_e2e, imag_e2e = self.matrices[0]
