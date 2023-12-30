@@ -120,29 +120,6 @@ def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
       return (e2e_scale * n**(1/2))**(1/depth)
     return (e2e_scale / ((n**(1/2)) ** (depth - 1)))**(1/depth)
 
-
-
-class QuasiComplex(nn.Module):
-    def __init__(self, depth, size, mode, init_scale, diag_init_scale, smart_init=True):
-        super(QuasiComplex, self).__init__()
-        self.depth = depth
-        self.size = size
-        self.mode = mode
-
-        self.first_terms = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + torch.eye(size)*diag_init_scale) for _ in range(depth)])
-        self.second_terms = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + torch.eye(size)*diag_init_scale) for _ in range(depth)])
-        # self.matrices = list(zip(self.real_matrices, self.imag_matrices)) if mode=="complex" else self.real_matrices    
-    
-    def forward(self):
-        first_prod = self.first_terms[0]
-        second_prod = self.second_terms[0]
-        for i in range(1, self.depth):
-            first_prod = torch.matmul(first_prod, self.first_terms[i])
-            second_prod = torch.matmul(second_prod, self.second_terms[i])
-        return first_prod - second_prod
-    
-    def calc_balanced(self):
-        return []
     
 def conjugate_transpose(w):
     if isinstance(w, tuple):

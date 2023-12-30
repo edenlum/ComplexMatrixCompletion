@@ -18,12 +18,24 @@ class MatrixMultiplier(nn.Module):
         self.matrices = list(zip(self.real_matrices, self.imag_matrices)) if mode=="complex" else self.real_matrices
 
     def forward(self):
+        if self.mode == "quasi_complex":
+            return self._quasi_complex_forward()
+        
         w_e2e = self.matrices[0]
 
         for w in self.matrices[1:]:
             w_e2e = complex_matmul(w, w_e2e)
 
         return w_e2e[0] if self.mode == "complex" else w_e2e
+    
+    def _quasi_complex_forward(self):
+        real_e2e, imag_e2e = self.matrices[0]
+
+        for real, imag in self.matrices[1:]:
+            real_e2e = torch.matmul(real, real_e2e)
+            imag_e2e = torch.matmul(imag, imag_e2e)
+
+        return real_e2e - imag_e2e
 
     def calc_real_parts(self):
         a, c = self.real_matrices
@@ -40,19 +52,3 @@ class MatrixMultiplier(nn.Module):
             else:
                 balanced.append(torch.norm(xxT - yTy))
         return balanced
-
-
-class QuasiComplex(MatrixMultiplier):
-    def __init__(self, *args, **kwargs):
-        if args[2] != 'complex':
-            raise ValueError("Mode must be 'complex' in QuasiComplex")
-        super().__init__(*args, **kwargs)
-
-    def forward(self):
-        real_e2e, imag_e2e = self.matrices[0]
-
-        for real, imag in self.matrices[1:]:
-            real_e2e = torch.matmul(real, real_e2e)
-            imag_e2e = torch.matmul(imag, imag_e2e)
-
-        return real_e2e - imag_e2e
