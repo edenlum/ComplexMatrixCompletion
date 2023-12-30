@@ -13,30 +13,31 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, epochs=50001, smart_init=True, use_wandb=True, seed=1, quasi_complex=False):
     if not mode == 'quasi_complex':
-        mm = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
+        model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
     else:
-        mm = QuasiComplex(depth, n, mode, init_scale, diag_init_scale, smart_init)
+        model = QuasiComplex(depth, n, mode, init_scale, diag_init_scale, smart_init)
     dataObj = Data(n=n, rank=rank, seed=seed)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    mm.to(device)
+    model.to(device)
     observations_gt = observations_gt.to(device)
     if use_wandb:
-        wandb.watch(mm)
+        wandb.watch(model)
+        wandb.config["data_eff_rank"] = effective_rank(observations_gt)
     criterion = nn.MSELoss()
-    # optimizer = optim.SGD(mm.parameters(), lr=step_size)
-    optimizer = optim.SGD(mm.parameters(), lr=step_size)
+    optimizer = optim.SGD(model.parameters(), lr=step_size)
 
     singular_values_list = []
+    complex_sing_values_list = []
     balanced_diff_list = []
     df_dict = defaultdict(list)
     for epoch in range(epochs):
         optimizer.zero_grad()
 
-        pred = mm()
+        pred = model()
         pred_flat, obs_flat = pred.flatten(), observations_gt.flatten()
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
@@ -47,14 +48,17 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
         optimizer.step()
         if epoch % 10 == 0:
             _, S, _ = torch.svd(pred)
-            singular_values_list.append(S.tolist()[:10])
-            # balanced_diff_list.append(mm.calc_balanced())
+            singular_values_list.append(S.tolist())
+            balanced_diff_list.append(model.calc_balanced())
             eff_rank = effective_rank(pred)
-            if use_wandb:
-                # _, S, _ = torch.svd(pred)
-                # singular_values_list.append(S.tolist()[:10])
-                # balanced_diff_list.append(mm.calc_balanced())
 
+            w_e2e = model.matrices[0]
+            for w in model.matrices[1:]:
+                w_e2e = complex_matmul(w, w_e2e)
+            _, S, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
+            complex_sing_values_list.append(S.tolist())
+
+            if use_wandb:
                 wandb.log({
                   "epoch": epoch, 
                   "train_loss": train_loss, 
@@ -87,6 +91,12 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
                         ys=list(zip(*balanced_diff_list)),
                         title="Balanced Difference",
                         xname="epoch/10"
+            ),
+            "complex_singular_values" : wandb.plot.line_series(
+                        xs=list(range(epochs//10)), 
+                        ys=list(zip(*complex_sing_values_list)),
+                        title="Singular Values",
+                        xname="epoch/10"
         )})
     
     print("Training complete")
@@ -112,11 +122,12 @@ def main():
                 "mode":                 ['quasi_complex'],
                 "n_train":              [2000],
                 "n":                    [100],
-                "rank":                 [5],
+                "rank":                 [50],
                 "depth":                [4],
                 "smart_init":           [True],
                 "use_wandb":            [True],
-                "seed":                 np.arange(10),
+                "seed":                 np.arange(1),
+                "quasiComplex":         [True]
         })):
             if not kwargs['smart_init'] and kwargs['diag_init_scale'] > 0:
                 raise ValueError("If 'smart init' is False the 'diag_init_scale' must be set to 0.")
@@ -133,8 +144,7 @@ def main():
             if kwargs['use_wandb']:
                 wandb.init(
                     project="ComplexMatrixCompletion",
-                    # entity="complex-team",
-                    # name=f"experiment-{i}",
+                    entity="complex-team",
                     name=exp_name,
                     config=kwargs
                 )
