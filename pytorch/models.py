@@ -15,7 +15,7 @@ class MatrixMultiplier(nn.Module):
         init_scale = calc_init_scale(depth, size, init_scale, mode)
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
         self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
-        self.matrices = list(zip(self.real_matrices, self.imag_matrices)) if mode=="complex" else self.real_matrices
+        self.matrices = self.real_matrices if mode=="real" else list(zip(self.real_matrices, self.imag_matrices))
 
     def forward(self):
         if self.mode == "quasi_complex":

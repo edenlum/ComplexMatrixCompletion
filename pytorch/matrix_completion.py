@@ -7,7 +7,9 @@ from collections import defaultdict
 import pandas as pd
 import os
 
-from matrix_completion_utils import MatrixMultiplier, QuasiComplex, Data, effective_rank
+from matrix_completion_utils import effective_rank
+from data import Data
+from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
