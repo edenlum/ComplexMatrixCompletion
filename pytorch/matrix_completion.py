@@ -5,13 +5,17 @@ import numpy as np
 import itertools
 from collections import defaultdict
 import pandas as pd
+import os
 
-from matrix_completion_utils import MatrixMultiplier, Data, effective_rank
+from matrix_completion_utils import MatrixMultiplier, QuasiComplex, Data, effective_rank
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, epochs=20001, smart_init=True, use_wandb=True, seed=1):
-    mm = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
+def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, epochs=50001, smart_init=True, use_wandb=True, seed=1, quasi_complex=False):
+    if not mode == 'quasi_complex':
+        mm = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
+    else:
+        mm = QuasiComplex(depth, n, mode, init_scale, diag_init_scale, smart_init)
     dataObj = Data(n=n, rank=rank, seed=seed)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
@@ -20,8 +24,8 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
 
     mm.to(device)
     observations_gt = observations_gt.to(device)
-
-    wandb.watch(mm)
+    if use_wandb:
+        wandb.watch(mm)
     criterion = nn.MSELoss()
     # optimizer = optim.SGD(mm.parameters(), lr=step_size)
     optimizer = optim.SGD(mm.parameters(), lr=step_size)
@@ -44,12 +48,12 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
         if epoch % 10 == 0:
             _, S, _ = torch.svd(pred)
             singular_values_list.append(S.tolist()[:10])
-            balanced_diff_list.append(mm.calc_balanced())
+            # balanced_diff_list.append(mm.calc_balanced())
             eff_rank = effective_rank(pred)
             if use_wandb:
-                _, S, _ = torch.svd(pred)
-                singular_values_list.append(S.tolist()[:10])
-                balanced_diff_list.append(mm.calc_balanced())
+                # _, S, _ = torch.svd(pred)
+                # singular_values_list.append(S.tolist()[:10])
+                # balanced_diff_list.append(mm.calc_balanced())
 
                 wandb.log({
                   "epoch": epoch, 
@@ -68,7 +72,7 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
                 df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
       
         if epoch % 100 == 0:
-            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.2f}, Val Loss: {val_loss.item():.2f}')
+            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
 
     if use_wandb:
         wandb.log({
@@ -102,10 +106,10 @@ def experiments(kwargs):
 def main():
     for j in np.arange(1):
         for i, kwargs in enumerate(experiments({
-                "init_scale":           [0.0],
-                "diag_init_scale":      [1e-1],
-                "step_size":            [5e-1],
-                "mode":                 ['real'],
+                "init_scale":           [1e-3],
+                "diag_init_scale":      [0.1],
+                "step_size":            [3.0],
+                "mode":                 ['quasi_complex'],
                 "n_train":              [2000],
                 "n":                    [100],
                 "rank":                 [5],
@@ -117,13 +121,14 @@ def main():
             if not kwargs['smart_init'] and kwargs['diag_init_scale'] > 0:
                 raise ValueError("If 'smart init' is False the 'diag_init_scale' must be set to 0.")
             print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-            if kwargs['smart_init'] and kwargs['mode'] == 'complex' and kwargs['init_scale'] == 0.0:
-                exp_name = "rnd_init_{}_depth_{}_complex_diaginitscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['step_size'])
-            # elif kwargs['mode'] == 'real' and kwargs['init_scale'] > 0.0 and kwargs['diag_init_scale'] == 0.0:
-            elif kwargs['mode'] == 'real':
-                exp_name = "rnd_init_{}_depth_{}_real_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
-            else:
-                raise ValueError('Testing only real vs complex with diagonal init.')
+            exp_name = "rnd_init_{}_depth_{}_{}_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['mode'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
+            # if kwargs['smart_init'] and kwargs['mode'] == 'complex' and kwargs['init_scale'] == 0.0:
+            #     exp_name = "rnd_init_{}_depth_{}_complex_diaginitscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['step_size'])
+            # # elif kwargs['mode'] == 'real' and kwargs['init_scale'] > 0.0 and kwargs['diag_init_scale'] == 0.0:
+            # elif kwargs['mode'] == 'real':
+            #     exp_name = "rnd_init_{}_depth_{}_real_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
+            # else:
+            #     raise ValueError('Testing only real vs complex with diagonal init.')
             
             if kwargs['use_wandb']:
                 wandb.init(
@@ -138,8 +143,10 @@ def main():
             else:
                 results = train(**kwargs)
                 results_df = pd.DataFrame(results)
-                curr_dir = 'diag_init' if kwargs['smart_init'] else 'standard_init'
-                results_df.to_csv('pytorch/results/{}/{}.csv'.format(curr_dir, exp_name))
+                _curr_dir = 'diag_init' if kwargs['smart_init'] else 'standard_init'
+                curr_dir = os.path.join('pytorch/results', _curr_dir, kwargs['mode'], '{}.csv'.format(exp_name))
+                results_df.to_csv(curr_dir)
+                # results_df.to_csv('pytorch/results/{}/{}.csv'.format(curr_dir, exp_name))
 
 if __name__=='__main__':
     main()
