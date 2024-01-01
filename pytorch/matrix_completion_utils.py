@@ -109,6 +109,8 @@ def start_direction(depth, size, diag_init_scale, mode):
     diag_init_scale = calc_init_scale(depth, size, diag_init_scale, mode, diag=True)
     if mode == "complex":
         return torch.eye(size) * real * diag_init_scale, torch.eye(size) * imag * diag_init_scale
+    elif mode == "quasi_complex":
+        return torch.eye(size) * diag_init_scale, torch.eye(size) * diag_init_scale
     else:
         return torch.eye(size) * diag_init_scale, 0
 
@@ -117,7 +119,7 @@ def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
     # if complex, then there is another sqrt(2) for every multiplication (i.e sqrt(2)^(depth-1))
     n = n if mode == "real" else 2*n
     if diag:
-      return (e2e_scale * n**(1/2))**(1/depth)
+        return (e2e_scale * n**(1/2))**(1/depth)
     return (e2e_scale / ((n**(1/2)) ** (depth - 1)))**(1/depth)
 
     

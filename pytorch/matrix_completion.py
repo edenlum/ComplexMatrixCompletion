@@ -13,7 +13,8 @@ from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, epochs=50001, smart_init=True, use_wandb=True, seed=1, quasi_complex=False):
+def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, 
+          epochs=5001, smart_init=True, use_wandb=True, seed=1):
     model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
     dataObj = Data(n=n, rank=rank, seed=seed)
     observations_gt, indices = dataObj.generate_observations(n_train)
@@ -127,20 +128,20 @@ def name(kwargs):
     elif kwargs['mode'] == 'real':
         return "rnd_init_{}_depth_{}_real_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
     else:
-        raise ValueError('Testing only real vs complex with diagonal init.')
+        return f"rnd_init_{kwargs['seed']}_depth_{kwargs['depth']}_{kwargs['mode']}_diaginitscale_{kwargs['diag_init_scale']}_initscale_{kwargs['init_scale']}_lr_{kwargs['step_size']}"
             
 def main():
     for j in np.arange(1):
         for i, kwargs in enumerate(experiments({
-                "init_scale":           [1e-3, 3e-4, 1e-4, 3e-5],
-                "diag_init_scale":      [0],
+                "init_scale":           [1e-5],
+                "diag_init_scale":      [1e-4],
                 "step_size":            [3],
                 "mode":                 ['quasi_complex'],
                 "n_train":              [2000],
                 "n":                    [100],
                 "rank":                 [5],
                 "depth":                [4],
-                "smart_init":           [False],
+                "smart_init":           [True],
                 "use_wandb":            [True],
                 "seed":                 np.arange(10),
         })):
