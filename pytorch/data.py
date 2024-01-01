@@ -3,12 +3,12 @@ import numpy as np
 
 class Data:
     def __init__(self, n, rank, symmetric=False, seed=1):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
         self.n = n
         self.r = rank
         self.symmetric = symmetric
         self.generate_gt_matrix()
-        torch.manual_seed(seed)
-        np.random.seed(seed)
 
     def generate_gt_matrix(self):
         U = torch.randn(self.n, self.r)
