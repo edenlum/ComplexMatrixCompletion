@@ -131,37 +131,37 @@ def name(kwargs):
         return f"rnd_init_{kwargs['seed']}_depth_{kwargs['depth']}_{kwargs['mode']}_diaginitscale_{kwargs['diag_init_scale']}_initscale_{kwargs['init_scale']}_lr_{kwargs['step_size']}"
             
 def main():
-    for j in np.arange(1):
-        for i, kwargs in enumerate(experiments({
-                "init_scale":           [1e-5],
-                "diag_init_scale":      [1e-4],
-                "step_size":            [3],
-                "mode":                 ['quasi_complex'],
-                "n_train":              [2000],
-                "n":                    [100],
-                "rank":                 [5],
-                "depth":                [4],
-                "smart_init":           [True],
-                "use_wandb":            [True],
-                "seed":                 np.arange(10),
-        })):
-            exp_name = name(kwargs)
-            if kwargs['use_wandb']:
-                wandb.init(
-                    project="ComplexMatrixCompletion",
-                    entity="complex-team",
-                    name=exp_name,
-                    config=kwargs
-                )
-                train(**kwargs)
-                wandb.finish()
-            else:
-                results = train(**kwargs)
-                results_df = pd.DataFrame(results)
-                _curr_dir = 'diag_init' if kwargs['smart_init'] else 'standard_init'
-                curr_dir = os.path.join('pytorch/results', _curr_dir, kwargs['mode'], '{}.csv'.format(exp_name))
-                results_df.to_csv(curr_dir)
-                # results_df.to_csv('pytorch/results/{}/{}.csv'.format(curr_dir, exp_name))
+    for i, kwargs in enumerate(experiments({
+            "init_scale":           [0],
+            "diag_init_scale":      [1e-4],
+            "diag_noise_std":       [1e-4, 3e-4, 1e-5, 3e-6, 1e-6],
+            "step_size":            [3],
+            "mode":                 ['real', 'complex', 'quasi_complex'],
+            "n_train":              [2000],
+            "n":                    [100],
+            "rank":                 [5],
+            "depth":                [4],
+            "smart_init":           [True],
+            "use_wandb":            [True],
+            "seed":                 np.arange(1),
+    })):
+        exp_name = name(kwargs)
+        if kwargs['use_wandb']:
+            wandb.init(
+                project="ComplexMatrixCompletion",
+                entity="complex-team",
+                name=exp_name,
+                config=kwargs
+            )
+            train(**kwargs)
+            wandb.finish()
+        else:
+            results = train(**kwargs)
+            results_df = pd.DataFrame(results)
+            _curr_dir = 'diag_init' if kwargs['smart_init'] else 'standard_init'
+            curr_dir = os.path.join('pytorch/results', _curr_dir, kwargs['mode'], '{}.csv'.format(exp_name))
+            results_df.to_csv(curr_dir)
+            # results_df.to_csv('pytorch/results/{}/{}.csv'.format(curr_dir, exp_name))
 
 if __name__=='__main__':
     main()

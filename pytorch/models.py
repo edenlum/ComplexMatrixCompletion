@@ -2,14 +2,14 @@ from torch import nn
 from matrix_completion_utils import *
 
 class MatrixMultiplier(nn.Module):
-    def __init__(self, depth, size, mode, init_scale, diag_init_scale, smart_init=True):
+    def __init__(self, depth, size, mode, init_scale, diag_init_scale, diag_noise_std=0, smart_init=True):
         super(MatrixMultiplier, self).__init__()
         self.depth = depth
         self.size = size
         self.mode = mode
 
         if smart_init:
-            real, imag = start_direction(depth, size, diag_init_scale, mode)
+            real, imag = start_direction(depth, size, diag_init_scale, mode, diag_noise_std)
         else:
             real, imag = 0, 0
         init_scale = calc_init_scale(depth, size, init_scale, mode)
