@@ -13,9 +13,9 @@ from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth, 
+def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, n, rank, depth, 
           epochs=5001, smart_init=True, use_wandb=True, seed=1):
-    model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, smart_init)
+    model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std, smart_init)
     dataObj = Data(n=n, rank=rank, seed=seed)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
@@ -47,16 +47,29 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
         train_loss.backward()
         optimizer.step()
         if epoch % 10 == 0:
-            # _, S, _ = torch.svd(pred)
-            # singular_values_list.append(S.tolist())
+            _, S, _ = torch.svd(pred)
+            singular_values_list.append(S.tolist())
             # balanced_diff_list.append(model.calc_balanced())
             eff_rank = effective_rank(pred)
 
-            # w_e2e = model.matrices[0]
-            # for w in model.matrices[1:]:
-                # w_e2e = complex_matmul(w, w_e2e)
-            # _, S, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
-            # complex_sing_values_list.append(S.tolist())
+            # if mode=='complex':
+                # w_e2e = model.matrices[0]
+                # for w in model.matrices[1:]:
+                #     w_e2e = complex_matmul(w, w_e2e)
+                # _, S, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
+                # complex_sing_values_list.append(S.tolist())
+            if mode=='quasi_complex':
+                real_e2e, imag_e2e = model.matrices[0]
+                for real, imag in model.matrices[1:]:
+                    real_e2e = torch.matmul(real, real_e2e)
+                    imag_e2e = torch.matmul(imag, imag_e2e)
+                _, S_real, _ = torch.svd(real_e2e)
+                _, S_imag, _ = torch.svd(imag_e2e)
+                wandb.log({
+                "epoch": epoch,
+                "singular_values_real": {i: s for i, s in enumerate(S_real.tolist()[:10])},
+                "singular_values_imag": {i: s for i, s in enumerate(S_imag.tolist()[:10])}
+                })
 
             if use_wandb:
                 wandb.log({
@@ -65,8 +78,10 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
                   "val_loss": val_loss, 
                   "effective_rank": eff_rank,
                   "standard_deviation": torch.std(pred).item(),
-                  "fro_norm/size": torch.norm(pred).item()/n
-                  })
+                  "fro_norm/size": torch.norm(pred).item()/n,
+                  "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
+                })
+                  
             else:
                 # log all relevant variable.
                 for var in ['train_loss', 'val_loss']:
@@ -77,27 +92,6 @@ def train(init_scale, diag_init_scale, step_size, mode, n_train, n, rank, depth,
       
         if epoch % 100 == 0:
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
-
-    # if use_wandb:
-    #     wandb.log({
-    #         "singular_values" : wandb.plot.line_series(
-    #                     xs=list(range(epochs//10)), 
-    #                     ys=list(zip(*singular_values_list)),
-    #                     title="Singular Values",
-    #                     xname="epoch/10"
-    #         ),
-    #         "balanced_diff" : wandb.plot.line_series(
-    #                     xs=list(range(epochs//10)),
-    #                     ys=list(zip(*balanced_diff_list)),
-    #                     title="Balanced Difference",
-    #                     xname="epoch/10"
-    #         ),
-    #         "complex_singular_values" : wandb.plot.line_series(
-    #                     xs=list(range(epochs//10)), 
-    #                     ys=list(zip(*complex_sing_values_list)),
-    #                     title="Singular Values",
-    #                     xname="epoch/10"
-    #     )})
     
     print("Training complete")
     
@@ -114,36 +108,23 @@ def experiments(kwargs):
         yield dict(zip(arg_names, values))
 
 def name(kwargs):
-    if not kwargs['smart_init'] and kwargs['diag_init_scale'] > 0:
-        raise ValueError("If 'smart init' is False the 'diag_init_scale' must be set to 0.")
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-    if kwargs['mode'] == 'quasi_complex' and kwargs['init_scale'] == 0.0:
-        return "rnd_init_{}_depth_{}_quasiComplex_diaginitscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['step_size'])
-    elif kwargs['mode'] == 'quasi_complex' and not kwargs['smart_init']:
-        return "rnd_init_{}_depth_{}_quasiComplex_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['init_scale'], kwargs['step_size'])
-    if kwargs['smart_init'] and kwargs['mode'] == 'complex' and kwargs['init_scale'] == 0.0:
-        return "rnd_init_{}_depth_{}_complex_diaginitscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['step_size'])
-    elif kwargs['mode'] == 'complex':
-        return "rnd_init_{}_depth_{}_complex_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
-    elif kwargs['mode'] == 'real':
-        return "rnd_init_{}_depth_{}_real_diaginitscale_{}_initscale_{}_lr_{}".format(kwargs['seed'], kwargs['depth'], kwargs['diag_init_scale'], kwargs['init_scale'], kwargs['step_size'])
-    else:
-        return f"rnd_init_{kwargs['seed']}_depth_{kwargs['depth']}_{kwargs['mode']}_diaginitscale_{kwargs['diag_init_scale']}_initscale_{kwargs['init_scale']}_lr_{kwargs['step_size']}"
+    return f"{kwargs['seed']}_depth_{kwargs['depth']}_{kwargs['mode']}_noise_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_diagnoise_{kwargs['diag_noise_std']}_lr_{kwargs['step_size']}"
             
 def main():
     for i, kwargs in enumerate(experiments({
-            "init_scale":           [0],
+            "init_scale":           [1e-6, 0],
             "diag_init_scale":      [1e-4],
-            "diag_noise_std":       [1e-4, 3e-4, 1e-5, 3e-6, 1e-6],
+            "diag_noise_std":       [0],
             "step_size":            [3],
-            "mode":                 ['real', 'complex', 'quasi_complex'],
+            "mode":                 ['quasi_complex'],
             "n_train":              [2000],
             "n":                    [100],
             "rank":                 [5],
             "depth":                [4],
             "smart_init":           [True],
             "use_wandb":            [True],
-            "seed":                 np.arange(1),
+            "seed":                 np.arange(10),
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:
