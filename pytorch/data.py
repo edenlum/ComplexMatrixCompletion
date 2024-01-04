@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 
+from matrix_completion_utils import complex_matmul
+
+
 class Data:
     def __init__(self, n, rank, symmetric=False, seed=1):
         torch.manual_seed(seed)
@@ -22,6 +25,22 @@ class Data:
     def generate_observations(self, n_examples):
         indices = np.random.choice(self.n*self.n, size=(n_examples,), replace=False)
         return self.w_gt, indices
+
+
+class ComplexData(Data):
+    def generate_gt_matrix(self):
+        U_real = torch.randn(self.n, self.r)
+        U_imag = torch.randn(self.n, self.r)
+        if self.symmetric:
+            V_real = U_real
+            V_imag = U_imag
+        else:
+            V_real = torch.randn(self.n, self.r)
+            V_imag = torch.randn(self.n, self.r)
+            
+        real_gt, imag_gt = complex_matmul((U_real, U_imag), (V_real.T, V_imag.T))
+        self.w_gt = real_gt / torch.norm(real_gt, 'fro') * self.n
+
     
 def main():
     dataObj = Data(n=10, rank=3)
