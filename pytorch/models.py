@@ -2,16 +2,13 @@ from torch import nn
 from matrix_completion_utils import *
 
 class MatrixMultiplier(nn.Module):
-    def __init__(self, depth, size, mode, init_scale, diag_init_scale, diag_noise_std=0, smart_init=True):
+    def __init__(self, depth, size, mode, init_scale, diag_init_scale, diag_noise_std=0):
         super(MatrixMultiplier, self).__init__()
         self.depth = depth
         self.size = size
         self.mode = mode
 
-        if smart_init:
-            real, imag = start_direction(depth, size, diag_init_scale, mode, diag_noise_std)
-        else:
-            real, imag = 0, 0
+        real, imag = start_direction(depth, size, diag_init_scale, mode, diag_noise_std)
         init_scale = calc_init_scale(depth, size, init_scale, mode)
         self.real_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + real) for _ in range(depth)])
         self.imag_matrices = nn.ParameterList([nn.Parameter(torch.randn(size, size) * init_scale + imag) for _ in range(depth)])
@@ -20,6 +17,8 @@ class MatrixMultiplier(nn.Module):
     def forward(self):
         if self.mode == "quasi_complex":
             return self._quasi_complex_forward()
+        elif self.mode == "magnitude":
+            return self._magnitude_forward()
         
         w_e2e = self.matrices[0]
 
@@ -36,6 +35,16 @@ class MatrixMultiplier(nn.Module):
             imag_e2e = torch.matmul(imag, imag_e2e)
 
         return real_e2e - imag_e2e
+    
+    def _magnitude_forward(self):
+        w_e2e = self.matrices[0]
+
+        for w in self.matrices[1:]:
+            w_e2e = complex_matmul(w, w_e2e)
+
+        magnitude = torch.sqrt(w_e2e[0]**2 + w_e2e[1]**2)
+        phase = torch.atan(w_e2e[1] / w_e2e[0])
+        return magnitude, phase
 
     def calc_real_parts(self):
         a, c = self.real_matrices

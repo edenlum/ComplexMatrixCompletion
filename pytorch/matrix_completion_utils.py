@@ -112,7 +112,7 @@ def start_direction(depth, size, diag_init_scale, mode, diag_noise_std):
         noisy_diag[i, i] = torch.randn(1) * diag_noise_std    
     diag_init_scale = calc_init_scale(depth, size, diag_init_scale, mode, diag=True)
     identity = torch.eye(size) * diag_init_scale
-    if mode == "complex":
+    if mode == "complex" or mode == "magnitude":
         return (identity * real + noisy_diag,
                 identity * imag + noisy_diag)
     elif mode == "quasi_complex":

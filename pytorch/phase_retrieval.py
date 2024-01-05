@@ -13,10 +13,10 @@ from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, 
-          n, rank, depth, epochs=5001, use_wandb=True, seed=1, complex_data=False):
-    model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std)
-    dataObj = ComplexData(n=n, rank=rank, seed=seed) if complex_data else Data(n=n, rank=rank, seed=seed)
+def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train, 
+          n, rank, depth, epochs=5001, use_wandb=True, seed=1):
+    model = MatrixMultiplier(depth, n, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
+    dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
     np.random.seed(seed)
@@ -34,11 +34,12 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train,
     for epoch in range(epochs):
         optimizer.zero_grad()
 
-        pred = model()
+        pred, phase_pred = model()
         pred_flat, obs_flat = pred.flatten(), observations_gt.flatten()
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
         val_loss = criterion(pred_flat[test_indices], obs_flat[test_indices])
+        phase_loss = criterion(phase_pred.flatten(), dataObj.phase.flatten())
 
         # Backward pass and optimization
         train_loss.backward()
@@ -48,34 +49,21 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train,
             # balanced_diff_list.append(model.calc_balanced())
             eff_rank = effective_rank(pred)
 
-            if mode=='complex':
-                w_e2e = model.matrices[0]
-                for w in model.matrices[1:]:
-                    w_e2e = complex_matmul(w, w_e2e)
-                _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
-                wandb.log({
-                  "epoch": epoch,
-                  "singular_values_complex": {i: s for i, s in enumerate(S_complex.tolist()[:10])}
-                })
-
-            if mode=='quasi_complex':
-                real_e2e, imag_e2e = model.matrices[0]
-                for real, imag in model.matrices[1:]:
-                    real_e2e = torch.matmul(real, real_e2e)
-                    imag_e2e = torch.matmul(imag, imag_e2e)
-                _, S_real, _ = torch.svd(real_e2e)
-                _, S_imag, _ = torch.svd(imag_e2e)
-                wandb.log({
+            w_e2e = model.matrices[0]
+            for w in model.matrices[1:]:
+                w_e2e = complex_matmul(w, w_e2e)
+            _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
+            wandb.log({
                 "epoch": epoch,
-                "singular_values_real": {i: s for i, s in enumerate(S_real.tolist()[:10])},
-                "singular_values_imag": {i: s for i, s in enumerate(S_imag.tolist()[:10])}
-                })
+                "singular_values_complex": {i: s for i, s in enumerate(S_complex.tolist()[:10])}
+            })
 
             if use_wandb:
                 wandb.log({
                   "epoch": epoch, 
                   "train_loss": train_loss, 
                   "val_loss": val_loss, 
+                  "phase_loss": phase_loss,
                   "effective_rank": eff_rank,
                   "standard_deviation": torch.std(pred).item(),
                   "fro_norm/size": torch.norm(pred).item()/n,
@@ -117,14 +105,12 @@ def main():
             "diag_init_scale":      [1e-4],
             "diag_noise_std":       [0],
             "step_size":            [3],
-            "mode":                 ['real', 'complex'],
             "n_train":              [3000],
             "n":                    [100],
             "rank":                 [5],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),
-            "complex_data":         [True]
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:

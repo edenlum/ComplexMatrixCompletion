@@ -28,6 +28,9 @@ class Data:
 
 
 class ComplexData(Data):
+    def __init__(self, n, rank, symmetric=False, seed=1, magnitude=False):
+        super().__init__(n, rank, symmetric=False, seed=1)
+        self.magnitude = magnitude
     def generate_gt_matrix(self):
         U_real = torch.randn(self.n, self.r)
         U_imag = torch.randn(self.n, self.r)
@@ -39,7 +42,15 @@ class ComplexData(Data):
             V_imag = torch.randn(self.n, self.r)
             
         real_gt, imag_gt = complex_matmul((U_real, U_imag), (V_real.T, V_imag.T))
-        self.w_gt = real_gt / torch.norm(real_gt, 'fro') * self.n
+        self.complex_gt = (
+          real_gt / torch.norm(real_gt, 'fro') * self.n, 
+          imag_gt / torch.norm(imag_gt, 'fro') * self.n
+        )
+        if self.magnitude:
+            self.phase = torch.atan(self.complex_gt[1] / self.complex_gt[0])
+            self.w_gt = torch.sqrt(self.complex_gt[0]**2 + self.complex_gt[1]**2)
+        else:
+            self.w_gt = self.complex_gt[0]
 
     
 def main():
