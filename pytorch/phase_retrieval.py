@@ -24,6 +24,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
 
     model.to(device)
     observations_gt = observations_gt.to(device)
+    phase = dataObj.phase.to(device)
     if use_wandb:
         wandb.watch(model)
         wandb.config["data_eff_rank"] = effective_rank(observations_gt)
@@ -39,7 +40,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
         val_loss = criterion(pred_flat[test_indices], obs_flat[test_indices])
-        phase_loss = criterion(phase_pred.flatten(), dataObj.phase.flatten())
+        phase_loss = criterion(phase_pred.flatten(), phase.flatten())
 
         # Backward pass and optimization
         train_loss.backward()
@@ -50,8 +51,11 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
             eff_rank = effective_rank(pred)
 
             w_e2e = model.matrices[0]
+            print(w_e2e)
             for w in model.matrices[1:]:
+                print(w)
                 w_e2e = complex_matmul(w, w_e2e)
+            print(w_e2e)
             _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
             wandb.log({
                 "epoch": epoch,
@@ -97,13 +101,13 @@ def experiments(kwargs):
 
 def name(kwargs):
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-    return f"{kwargs['seed']}_depth_{kwargs['depth']}_{kwargs['mode']}_noise_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_diagnoise_{kwargs['diag_noise_std']}_lr_{kwargs['step_size']}"
+    return f"{kwargs['seed']}_depth_{kwargs['depth']}_noise_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_diagnoise_{kwargs['diag_noise_std']}_lr_{kwargs['step_size']}"
             
 def main():
     for i, kwargs in enumerate(experiments({
             "init_scale":           [0],
             "diag_init_scale":      [1e-4],
-            "diag_noise_std":       [0],
+            "diag_noise_std":       [1e-5],
             "step_size":            [3],
             "n_train":              [3000],
             "n":                    [100],

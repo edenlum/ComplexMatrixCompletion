@@ -29,8 +29,9 @@ class Data:
 
 class ComplexData(Data):
     def __init__(self, n, rank, symmetric=False, seed=1, magnitude=False):
-        super().__init__(n, rank, symmetric=False, seed=1)
         self.magnitude = magnitude
+        super().__init__(n, rank, symmetric=False, seed=1)
+
     def generate_gt_matrix(self):
         U_real = torch.randn(self.n, self.r)
         U_imag = torch.randn(self.n, self.r)
