@@ -10,7 +10,6 @@ class MatrixMultiplier(nn.Module):
 
         real, imag = start_direction(depth, size, diag_init_scale, mode, diag_noise_std)
         init_scale = calc_init_scale(depth, size, init_scale, mode)
-        print(real, imag, init_scale)
 
         diag_noise_std = calc_init_scale(depth, size, diag_noise_std, mode, diag=True)
     

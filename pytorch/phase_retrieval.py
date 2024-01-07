@@ -45,17 +45,15 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
         # Backward pass and optimization
         train_loss.backward()
         optimizer.step()
+
         if epoch % 10 == 0:
             _, S, _ = torch.svd(pred)
             # balanced_diff_list.append(model.calc_balanced())
             eff_rank = effective_rank(pred)
 
             w_e2e = model.matrices[0]
-            print(w_e2e)
             for w in model.matrices[1:]:
-                print(w)
                 w_e2e = complex_matmul(w, w_e2e)
-            print(w_e2e)
             _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
             wandb.log({
                 "epoch": epoch,
@@ -83,7 +81,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                 df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
       
         if epoch % 100 == 0:
-            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
+            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}, Phase Loss: {phase_loss.item():.5f}')
     
     print("Training complete")
     
@@ -105,11 +103,11 @@ def name(kwargs):
             
 def main():
     for i, kwargs in enumerate(experiments({
-            "init_scale":           [0],
-            "diag_init_scale":      [1e-4],
-            "diag_noise_std":       [1e-5],
+            "init_scale":           [1e-2],
+            "diag_init_scale":      [0],
+            "diag_noise_std":       [0],
             "step_size":            [3],
-            "n_train":              [3000],
+            "n_train":              [7000],
             "n":                    [100],
             "rank":                 [5],
             "depth":                [4],

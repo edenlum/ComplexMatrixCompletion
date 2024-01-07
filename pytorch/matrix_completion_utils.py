@@ -106,20 +106,23 @@ def parse_results(directory_path, diag_init, mode='real'):
 def start_direction(depth, size, diag_init_scale, mode, diag_noise_std):
     real = np.cos((np.pi/2) / depth)
     imag = np.sin((np.pi/2) / depth)
-    diag_noise_std = calc_init_scale(depth, size, diag_noise_std, mode, diag=True)
-    noisy_diag = torch.zeros(size, size)
-    for i in range(size):
-        noisy_diag[i, i] = torch.randn(1) * diag_noise_std    
+
     diag_init_scale = calc_init_scale(depth, size, diag_init_scale, mode, diag=True)
     identity = torch.eye(size) * diag_init_scale
     if mode == "complex" or mode == "magnitude":
-        return (identity * real + noisy_diag,
-                identity * imag + noisy_diag)
+        return (identity * real,
+                identity * imag)
     elif mode == "quasi_complex":
-        return (identity + noisy_diag, 
-                identity + noisy_diag)
+        return (identity, 
+                identity)
     else:
-        return (identity + noisy_diag, 0)
+        return (identity, 0)
+
+def noisy_diag(diag_noise_std, size):
+    noisy_diag = torch.zeros(size, size)
+    for i in range(size):
+        noisy_diag[i, i] = torch.randn(1) * diag_noise_std
+    return noisy_diag
 
 def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
     # end to end scale = init_scale ^ depth * sqrt(n) ^ (depth - 1)
