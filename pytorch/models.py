@@ -41,13 +41,10 @@ class MatrixMultiplier(nn.Module):
     
     def _magnitude_forward(self):
         w_e2e = self.matrices[0]
-
         for w in self.matrices[1:]:
             w_e2e = complex_matmul(w, w_e2e)
 
-        magnitude = torch.sqrt(w_e2e[0]**2 + w_e2e[1]**2)
-        phase = torch.atan(w_e2e[1] / w_e2e[0])
-        return magnitude, phase
+        return w_e2e
 
     def calc_real_parts(self):
         a, c = self.real_matrices

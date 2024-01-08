@@ -23,11 +23,11 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     torch.manual_seed(seed)
 
     model.to(device)
-    observations_gt = observations_gt.to(device)
+    real_gt, imag_gt = observations_gt[0].to(device), observations_gt[1].to(device)
     phase = dataObj.phase.to(device)
     if use_wandb:
         wandb.watch(model)
-        wandb.config["data_eff_rank"] = effective_rank(observations_gt)
+        wandb.config["data_eff_rank"] = effective_rank(real_gt + 1j*imag_gt)
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=step_size)
 
@@ -35,12 +35,15 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     for epoch in range(epochs):
         optimizer.zero_grad()
 
-        pred, phase_pred = model()
-        pred_flat, obs_flat = pred.flatten(), observations_gt.flatten()
+        pred, imag = model()
+        phase_pred = torch.abs(torch.atan(pred/imag))
+        phase = torch.abs(torch.atan(real_gt/imag_gt))
+        pred_flat, obs_flat = pred.flatten(), real_gt.flatten()
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
         val_loss = criterion(pred_flat[test_indices], obs_flat[test_indices])
         phase_loss = criterion(phase_pred.flatten(), phase.flatten())
+        imag_loss = criterion(torch.abs(imag).flatten(), torch.abs(imag_gt).flatten())
 
         # Backward pass and optimization
         train_loss.backward()
@@ -67,6 +70,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                   "val_loss": val_loss, 
                   "phase_loss": phase_loss,
                   "effective_rank": eff_rank,
+                  "imag_eff_rank": effective_rank(imag),
                   "standard_deviation": torch.std(pred).item(),
                   "fro_norm/size": torch.norm(pred).item()/n,
                   "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
@@ -81,9 +85,17 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                 df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
       
         if epoch % 100 == 0:
-            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}, Phase Loss: {phase_loss.item():.5f}')
+            print(f'Epoch {epoch}/{epochs}, \
+            Train Loss: {train_loss.item():.5f}, \
+            Val Loss: {val_loss.item():.5f}, \
+            Phase Loss: {phase_loss.item():.5f}, \
+            Imag Loss: {imag_loss.item():.5f}')
     
     print("Training complete")
+
+    print("IMAG PRED:", imag)
+    print("IMAG GT:  ", imag_gt)
+
     
     return df_dict
 
@@ -103,7 +115,7 @@ def name(kwargs):
             
 def main():
     for i, kwargs in enumerate(experiments({
-            "init_scale":           [1e-2],
+            "init_scale":           [1e-4],
             "diag_init_scale":      [0],
             "diag_noise_std":       [0],
             "step_size":            [3],

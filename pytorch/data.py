@@ -49,7 +49,7 @@ class ComplexData(Data):
         )
         if self.magnitude:
             self.phase = torch.atan(self.complex_gt[1] / self.complex_gt[0])
-            self.w_gt = torch.sqrt(self.complex_gt[0]**2 + self.complex_gt[1]**2)
+            self.w_gt = self.complex_gt
         else:
             self.w_gt = self.complex_gt[0]
 
