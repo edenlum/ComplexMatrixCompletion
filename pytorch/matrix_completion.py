@@ -13,88 +13,104 @@ from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+def log_results(epoch, model, train_loss, val_loss, use_wandb, pred, mode, df_dict, n):
+    _, S, _ = torch.svd(pred)
+    eff_rank = effective_rank(pred)
+
+    if mode=='complex':
+        w_e2e = model.matrices[0]
+        for w in model.matrices[1:]:
+            w_e2e = complex_matmul(w, w_e2e)
+        _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
+        wandb.log({
+            "epoch": epoch,
+            "singular_values_complex": {i: s for i, s in enumerate(S_complex.tolist()[:10])}
+        })
+
+    if mode=='quasi_complex':
+        real_e2e, imag_e2e = model.matrices[0]
+        for real, imag in model.matrices[1:]:
+            real_e2e = torch.matmul(real, real_e2e)
+            imag_e2e = torch.matmul(imag, imag_e2e)
+        _, S_real, _ = torch.svd(real_e2e)
+        _, S_imag, _ = torch.svd(imag_e2e)
+        wandb.log({
+        "epoch": epoch,
+        "singular_values_real": {i: s for i, s in enumerate(S_real.tolist()[:10])},
+        "singular_values_imag": {i: s for i, s in enumerate(S_imag.tolist()[:10])}
+        })
+
+    if use_wandb:
+        wandb.log({
+            "epoch": epoch, 
+            "train_loss": train_loss, 
+            "val_loss": val_loss, 
+            "effective_rank": eff_rank,
+            "standard_deviation": torch.std(pred).item(),
+            "fro_norm/size": torch.norm(pred).item()/n,
+            "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
+        })
+            
+    else:
+        # log all relevant variable.
+        for var in ['train_loss', 'val_loss']:
+            df_dict[var].append(eval(var).item())
+        df_dict['eff_rank'].append(eff_rank)
+        df_dict['standard_deviation'].append(torch.std(pred).item()),
+        df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
+
+def post_process(pred, mode):
+    if mode == "complex":
+        return pred[0] + 1j*pred[1]
+    elif mode == "quasi_complex":
+        return pred[0] - pred[1]
+    elif mode == "magnitude":
+        return torch.sqrt(pred[0]**2 + pred[1]**2)
+    else:
+        return pred
+
+
+def calc_losses(pred, gt, indices, criterion):
+    pred, gt = pred.flatten(), gt.flatten().to(device)
+    train_loss = criterion(pred[indices], gt[indices])
+
+    test_indices = np.setdiff1d(np.arange(gt.nelement()), indices)
+    val_loss = criterion(pred[test_indices], gt[test_indices])
+    return train_loss, val_loss
+
 def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, 
           n, rank, depth, epochs=5001, use_wandb=True, seed=1, complex_data=False):
-    model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std)
-    dataObj = ComplexData(n=n, rank=rank, seed=seed) if complex_data else Data(n=n, rank=rank, seed=seed)
-    observations_gt, indices = dataObj.generate_observations(n_train)
     
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    model.to(device)
-    observations_gt = observations_gt.to(device)
+    model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std).to(device)
+    dataObj = ComplexData(n=n, rank=rank, seed=seed) if complex_data else Data(n=n, rank=rank, seed=seed)
+    observations_gt, indices = dataObj.generate_observations(n_train)
+
     if use_wandb:
         wandb.watch(model)
         wandb.config["data_eff_rank"] = effective_rank(observations_gt)
+
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=step_size)
-
     df_dict = defaultdict(list)
     for epoch in range(epochs):
         optimizer.zero_grad()
 
         pred = model()
-        pred_flat, obs_flat = pred.flatten(), observations_gt.flatten()
-        train_loss = criterion(pred_flat[indices], obs_flat[indices])
-        test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
-        val_loss = criterion(pred_flat[test_indices], obs_flat[test_indices])
+        pred = post_process(pred, mode)
+        train_loss, val_loss = calc_losses(pred, observations_gt, indices, criterion)
 
-        # Backward pass and optimization
         train_loss.backward()
         optimizer.step()
         if epoch % 10 == 0:
-            _, S, _ = torch.svd(pred)
-            # balanced_diff_list.append(model.calc_balanced())
-            eff_rank = effective_rank(pred)
-
-            if mode=='complex':
-                w_e2e = model.matrices[0]
-                for w in model.matrices[1:]:
-                    w_e2e = complex_matmul(w, w_e2e)
-                _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
-                wandb.log({
-                  "epoch": epoch,
-                  "singular_values_complex": {i: s for i, s in enumerate(S_complex.tolist()[:10])}
-                })
-
-            if mode=='quasi_complex':
-                real_e2e, imag_e2e = model.matrices[0]
-                for real, imag in model.matrices[1:]:
-                    real_e2e = torch.matmul(real, real_e2e)
-                    imag_e2e = torch.matmul(imag, imag_e2e)
-                _, S_real, _ = torch.svd(real_e2e)
-                _, S_imag, _ = torch.svd(imag_e2e)
-                wandb.log({
-                "epoch": epoch,
-                "singular_values_real": {i: s for i, s in enumerate(S_real.tolist()[:10])},
-                "singular_values_imag": {i: s for i, s in enumerate(S_imag.tolist()[:10])}
-                })
-
-            if use_wandb:
-                wandb.log({
-                  "epoch": epoch, 
-                  "train_loss": train_loss, 
-                  "val_loss": val_loss, 
-                  "effective_rank": eff_rank,
-                  "standard_deviation": torch.std(pred).item(),
-                  "fro_norm/size": torch.norm(pred).item()/n,
-                  "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
-                })
-                  
-            else:
-                # log all relevant variable.
-                for var in ['train_loss', 'val_loss']:
-                    df_dict[var].append(eval(var).item())
-                df_dict['eff_rank'].append(eff_rank)
-                df_dict['standard_deviation'].append(torch.std(pred).item()),
-                df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
+            log_results(epoch, model, train_loss, val_loss, use_wandb, pred, mode, df_dict, n)
       
         if epoch % 100 == 0:
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
     
     print("Training complete")
-    
     return df_dict
 
 def experiments(kwargs):

@@ -47,11 +47,7 @@ class ComplexData(Data):
           real_gt / torch.norm(real_gt, 'fro') * self.n, 
           imag_gt / torch.norm(imag_gt, 'fro') * self.n
         )
-        if self.magnitude:
-            self.phase = torch.atan(self.complex_gt[1] / self.complex_gt[0])
-            self.w_gt = self.complex_gt
-        else:
-            self.w_gt = self.complex_gt[0]
+        self.w_gt = self.complex_gt
 
     
 def main():
