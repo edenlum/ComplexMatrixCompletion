@@ -131,7 +131,6 @@ def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
     if diag:
         return (e2e_scale * n**(1/2))**(1/depth)
     return (e2e_scale / ((n**(1/2)) ** (depth - 1)))**(1/depth)
-
     
 def conjugate_transpose(w):
     if isinstance(w, tuple):
@@ -154,6 +153,23 @@ def effective_rank(mat):
     normalized_singular_values = S / torch.sum(S)
     effective_rank = torch.exp(-torch.sum(normalized_singular_values * torch.log(normalized_singular_values)))
     return effective_rank.item()
+
+def process_phase_matrix(phase_matrix):
+  
+    non_negative_matrix = torch.abs(phase_matrix)
+
+    # Remove row phase
+    row_phases = non_negative_matrix[0:1, :]  # Row phases based on the first column after global phase removal
+    no_row_phase = non_negative_matrix - row_phases
+
+    # Remove column phase
+    column_phases = no_row_phase[:, 0:1]  # Column phases based on the first row after row phase removal
+    no_column_phase = no_row_phase - column_phases
+
+    # Adjust phase to be within (-pi, pi)
+    # adjusted_matrix = torch.mod(no_column_phase + np.pi, 2 * np.pi) - np.pi
+
+    return no_column_phase
 
 
 if __name__=='__main__':

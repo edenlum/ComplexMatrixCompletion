@@ -7,7 +7,7 @@ from collections import defaultdict
 import pandas as pd
 import os
 
-from matrix_completion_utils import effective_rank, complex_matmul
+from matrix_completion_utils import effective_rank, complex_matmul, process_phase_matrix
 from data import Data, ComplexData
 from models import MatrixMultiplier
 
@@ -25,6 +25,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     model.to(device)
     observations_gt = observations_gt.to(device)
     phase = dataObj.phase.to(device)
+    phase = process_phase_matrix(phase)
     if use_wandb:
         wandb.watch(model)
         wandb.config["data_eff_rank"] = effective_rank(observations_gt)
@@ -36,6 +37,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
         optimizer.zero_grad()
 
         pred, phase_pred = model()
+        phase_pred = process_phase_matrix(phase_pred)
         pred_flat, obs_flat = pred.flatten(), observations_gt.flatten()
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
@@ -84,6 +86,8 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}, Phase Loss: {phase_loss.item():.5f}')
     
     print("Training complete")
+    print(phase)
+    print(phase_pred)
     
     return df_dict
 
@@ -99,28 +103,30 @@ def experiments(kwargs):
 
 def name(kwargs):
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-    return f"{kwargs['seed']}_depth_{kwargs['depth']}_noise_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_diagnoise_{kwargs['diag_noise_std']}_lr_{kwargs['step_size']}"
+    return f"Magnitude rank {kwargs['rank']}"
             
 def main():
     for i, kwargs in enumerate(experiments({
-            "init_scale":           [1e-2],
+            "init_scale":           [1e-4],
             "diag_init_scale":      [0],
             "diag_noise_std":       [0],
-            "step_size":            [3],
+            "step_size":            [1],
             "n_train":              [7000],
             "n":                    [100],
-            "rank":                 [5],
+            "rank":                 [1,2,3,4],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:
+            config = {"comment": "Ignore row and col phase and sign"}
+            config.update(kwargs)
             wandb.init(
                 project="ComplexMatrixCompletion",
                 entity="complex-team",
                 name=exp_name,
-                config=kwargs
+                config=config
             )
             train(**kwargs)
             wandb.finish()
