@@ -13,27 +13,22 @@ from models import MatrixMultiplier
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def log_results(epoch, model, train_loss, val_loss, use_wandb, pred, mode, df_dict, n):
+def log_results(epoch, model_output, pred, train_loss, val_loss, use_wandb, mode, df_dict, n):
     _, S, _ = torch.svd(pred)
     eff_rank = effective_rank(pred)
 
+    # log complex singular values
     if mode=='complex':
-        w_e2e = model.matrices[0]
-        for w in model.matrices[1:]:
-            w_e2e = complex_matmul(w, w_e2e)
-        _, S_complex, _ = torch.svd(w_e2e[0] + 1j*w_e2e[1])
+        _, S_complex, _ = torch.svd(post_process(model_output, "complex"))
         wandb.log({
             "epoch": epoch,
             "singular_values_complex": {i: s for i, s in enumerate(S_complex.tolist()[:10])}
         })
 
+    # log real and imag singular values
     if mode=='quasi_complex':
-        real_e2e, imag_e2e = model.matrices[0]
-        for real, imag in model.matrices[1:]:
-            real_e2e = torch.matmul(real, real_e2e)
-            imag_e2e = torch.matmul(imag, imag_e2e)
-        _, S_real, _ = torch.svd(real_e2e)
-        _, S_imag, _ = torch.svd(imag_e2e)
+        _, S_real, _ = torch.svd(model_output[0])
+        _, S_imag, _ = torch.svd(model_output[1])
         wandb.log({
         "epoch": epoch,
         "singular_values_real": {i: s for i, s in enumerate(S_real.tolist()[:10])},
@@ -70,15 +65,49 @@ def post_process(pred, mode):
         return pred
 
 
-def calc_losses(pred, gt, indices, criterion):
-    pred, gt = pred.flatten(), gt.flatten().to(device)
-    train_loss = criterion(pred[indices], gt[indices])
+def calc_losses(prediction, ground_truth, indices, criterion):
+    train_loss = torch.zeros((1), dtype=torch.float32).to(device)
+    val_loss = torch.zeros((1), dtype=torch.float32).to(device)
+    prediction = prediction if isinstance(prediction, tuple) else (prediction,)
+    ground_truth = ground_truth if isinstance(ground_truth, tuple) else (ground_truth,)
+    for pred, gt in zip(prediction, ground_truth):
+        pred, gt = pred.flatten(), gt.flatten().to(device)
+        train_loss += criterion(pred[indices], gt[indices])
 
-    test_indices = np.setdiff1d(np.arange(gt.nelement()), indices)
-    val_loss = criterion(pred[test_indices], gt[test_indices])
+        test_indices = np.setdiff1d(np.arange(gt.nelement()), indices)
+        val_loss += criterion(pred[test_indices], gt[test_indices])
     return train_loss, val_loss
 
-def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, 
+def custom_data():
+    real_part = torch.tensor([[0, 1],[-1, 0]], dtype=torch.float32)
+    imag_part = torch.tensor([[1, 0], [0, 1]], dtype=torch.float32)
+    indices = np.arange(3)
+    return (real_part, imag_part), indices
+
+def train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n):
+    criterion = nn.MSELoss()
+    optimizer = optim.SGD(model.parameters(), lr=step_size)
+    df_dict = defaultdict(list)
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+
+        output = model()
+        pred = post_process(output, mode)
+        train_loss, val_loss = calc_losses(output, observations_gt, indices, criterion)
+
+        train_loss.backward()
+        optimizer.step()
+        if epoch % 10 == 0:
+            log_results(epoch, output, pred, train_loss, val_loss, use_wandb, mode, df_dict, n)
+      
+        if epoch % 100 == 0:
+            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
+    
+    print("Training complete")
+    print(output)
+    return df_dict
+
+def run(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, 
           n, rank, depth, epochs=5001, use_wandb=True, seed=1, complex_data=False):
     
     np.random.seed(seed)
@@ -86,31 +115,18 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train,
 
     model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std).to(device)
     dataObj = ComplexData(n=n, rank=rank, seed=seed) if complex_data else Data(n=n, rank=rank, seed=seed)
-    observations_gt, indices = dataObj.generate_observations(n_train)
+    observations_gt, indices = custom_data() #dataObj.generate_observations(n_train)
+    print(observations_gt)
+    # model_real = MatrixMultiplier(depth, n, 'real', init_scale, diag_init_scale, diag_noise_std).to(device)
+    # model_imag = MatrixMultiplier(depth, n, 'real', init_scale, diag_init_scale, diag_noise_std).to(device)
 
-    if use_wandb:
-        wandb.watch(model)
-        wandb.config["data_eff_rank"] = effective_rank(observations_gt)
+    # if use_wandb:
+        # wandb.watch(model)
+        # wandb.config["data_eff_rank"] = effective_rank(post_process(observations_gt, mode))
 
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=step_size)
-    df_dict = defaultdict(list)
-    for epoch in range(epochs):
-        optimizer.zero_grad()
+    df_dict = train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n)
+    # df_dict = train(model_imag, step_size, epochs, observations_gt[1], indices, use_wandb, mode, n)
 
-        pred = model()
-        pred = post_process(pred, mode)
-        train_loss, val_loss = calc_losses(pred, observations_gt, indices, criterion)
-
-        train_loss.backward()
-        optimizer.step()
-        if epoch % 10 == 0:
-            log_results(epoch, model, train_loss, val_loss, use_wandb, pred, mode, df_dict, n)
-      
-        if epoch % 100 == 0:
-            print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}')
-    
-    print("Training complete")
     return df_dict
 
 def experiments(kwargs):
@@ -132,11 +148,11 @@ def main():
             "init_scale":           [0],
             "diag_init_scale":      [1e-4],
             "diag_noise_std":       [0],
-            "step_size":            [3],
-            "mode":                 ['real', 'complex'],
-            "n_train":              [3000],
-            "n":                    [100],
-            "rank":                 [5],
+            "step_size":            [0.1],
+            "mode":                 ['complex'],
+            "n_train":              [3],
+            "n":                    [2],
+            "rank":                 [1],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),
@@ -150,10 +166,10 @@ def main():
                 name=exp_name,
                 config=kwargs
             )
-            train(**kwargs)
+            run(**kwargs)
             wandb.finish()
         else:
-            results = train(**kwargs)
+            results = run(**kwargs)
             results_df = pd.DataFrame(results)
             _curr_dir = 'diag_init' if kwargs['smart_init'] else 'standard_init'
             curr_dir = os.path.join('pytorch/results', _curr_dir, kwargs['mode'], '{}.csv'.format(exp_name))
