@@ -41,7 +41,7 @@ class MLP(torch.nn.Module):  # 继承 torch 的 Module
         return x
     
 
-def train_cuda(running_loss,net,optimizer,epoch):
+def train_cuda(running_loss, net, optimizer, criterion, epoch):
     for i, data in enumerate(trainloader, 0):
         # get the inputs; data is a list of [inputs, labels]
         inputs, labels = data
@@ -75,17 +75,27 @@ def test_cuda(net):
             correct += (predicted == labels).sum().item()
     print('Accuracy of the network on the test images: %d %%' % (100 * correct / total))
 
-mlp = MLP().to(device)
+def main(expand):
+    n_epochs = 20
+    mlp = MLP().to(device)
+    if expand:
+        print('#'*30)
+        print('Expanding Net!!!')
+        print('#'*30)
+        from expand_net import replace_linear_layers
+        replace_linear_layers(mlp, 2, mode=expand, init_scale=0.5)
 
-from expand_net import replace_linear_layers
-replace_linear_layers(mlp, 3, mode='real', init_scale=1)
+    criterion = nn.CrossEntropyLoss()
+    optimizer_mlp = optim.Adam(mlp.parameters(), lr=1e-4)
+    # optimizer_mlp = optim.SGD(mlp.parameters(), lr=0.01, momentum=0.9)
+    for epoch in range(n_epochs):  # loop over the dataset multiple times
+        running_loss = 0.0
+        train_cuda(running_loss, mlp, optimizer_mlp, criterion, epoch)
+        test_cuda(mlp)
 
-criterion = nn.CrossEntropyLoss()
-optimizer_mlp = optim.SGD(mlp.parameters(), lr=0.05, momentum=0.9)
-for epoch in range(5):  # loop over the dataset multiple times
-    
-    running_loss = 0.0
-    train_cuda(running_loss,mlp,optimizer_mlp,epoch)
-    test_cuda(mlp)
+    print('Finished Training')
 
-print('Finished Training')
+if __name__=='__main__':
+    # EXPAND = False
+    EXPAND = 'complex'
+    main(EXPAND)
