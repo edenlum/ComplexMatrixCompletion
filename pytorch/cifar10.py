@@ -83,7 +83,7 @@ def main(expand):
         print('Expanding Net!!!')
         print('#'*30)
         from expand_net import replace_linear_layers
-        replace_linear_layers(mlp, 2, mode=expand, init_scale=0.5)
+        replace_linear_layers(mlp, 2, mode=expand, init_scale=0.1)
 
     criterion = nn.CrossEntropyLoss()
     optimizer_mlp = optim.Adam(mlp.parameters(), lr=1e-4)

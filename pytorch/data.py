@@ -30,7 +30,7 @@ class Data:
 class ComplexData(Data):
     def __init__(self, n, rank, symmetric=False, seed=1, magnitude=False):
         self.magnitude = magnitude
-        super().__init__(n, rank, symmetric=False, seed=1)
+        super().__init__(n, rank, symmetric, seed)
 
     def generate_gt_matrix(self):
         U_real = torch.randn(self.n, self.r)
