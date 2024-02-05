@@ -14,9 +14,10 @@ from models import MatrixMultiplier
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train, 
-          n, rank, depth, epochs=5001, use_wandb=True, seed=1):
-    model = MatrixMultiplier(depth, n, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
-    dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True)
+          n, rank, depth, epochs=5001, use_wandb=True, seed=1, fourier=False):
+    model_size = n if not fourier else 2*n
+    model = MatrixMultiplier(depth, model_size, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
+    dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True, fourier=fourier)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
     np.random.seed(seed)
@@ -70,7 +71,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                   "phase_loss": phase_loss,
                   "effective_rank": eff_rank,
                   "standard_deviation": torch.std(pred).item(),
-                  "fro_norm/size": torch.norm(pred).item()/n,
+                  "fro_norm/size": torch.norm(pred).item()/model_size,
                   "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
                 })
                   
@@ -80,7 +81,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                     df_dict[var].append(eval(var).item())
                 df_dict['eff_rank'].append(eff_rank)
                 df_dict['standard_deviation'].append(torch.std(pred).item()),
-                df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
+                df_dict['fro_norm/size'].append(torch.norm(pred).item()/model_size)
       
         if epoch % 100 == 0:
             print(f'Epoch {epoch}/{epochs}, Train Loss: {train_loss.item():.5f}, Val Loss: {val_loss.item():.5f}, Phase Loss: {phase_loss.item():.5f}')

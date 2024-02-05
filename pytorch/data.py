@@ -28,8 +28,9 @@ class Data:
 
 
 class ComplexData(Data):
-    def __init__(self, n, rank, symmetric=False, seed=1, magnitude=False):
+    def __init__(self, n, rank, symmetric=False, seed=1, magnitude=False, fourier=False):
         self.magnitude = magnitude
+        self.fourier = fourier
         super().__init__(n, rank, symmetric, seed)
 
     def generate_gt_matrix(self):
@@ -43,6 +44,13 @@ class ComplexData(Data):
             V_imag = torch.randn(self.n, self.r)
             
         real_gt, imag_gt = complex_matmul((U_real, U_imag), (V_real.T, V_imag.T))
+        if self.fourier:
+            # pad the input with zeros to double the size
+            padding = (self.n//2, self.n//2, self.n//2, self.n//2)
+            real_gt = torch.nn.functional.pad(real_gt, padding, mode='constant', value=0)    
+            f = torch.fft.fft2(real_gt)
+            real_gt, imag_gt = f.real, f.imag
+            
         self.complex_gt = (
           real_gt / torch.norm(real_gt, 'fro') * self.n, 
           imag_gt / torch.norm(imag_gt, 'fro') * self.n
