@@ -112,12 +112,13 @@ def main():
             "diag_init_scale":      [0],
             "diag_noise_std":       [0],
             "step_size":            [1],
-            "n_train":              [7000],
-            "n":                    [100],
+            "n_train":              [1000],
+            "n":                    [50],
             "rank":                 [1,2,3,4],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),
+            "fourier":              [True]
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:

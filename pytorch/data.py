@@ -23,7 +23,7 @@ class Data:
         self.w_gt = w_gt / torch.norm(w_gt, 'fro') * self.n
 
     def generate_observations(self, n_examples):
-        indices = np.random.choice(self.n*self.n, size=(n_examples,), replace=False)
+        indices = np.random.choice(self.w_gt.nelement(), size=(n_examples,), replace=False)
         return self.w_gt, indices
 
 
