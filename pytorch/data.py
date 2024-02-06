@@ -45,10 +45,12 @@ class ComplexData(Data):
             
         real_gt, imag_gt = complex_matmul((U_real, U_imag), (V_real.T, V_imag.T))
         if self.fourier:
+            gt = U_real.matmul(V_real.T)
             # pad the input with zeros to double the size
             padding = (self.n//2, self.n//2, self.n//2, self.n//2)
-            real_gt = torch.nn.functional.pad(real_gt, padding, mode='constant', value=0)    
-            f = torch.fft.fft2(real_gt)
+            gt = torch.nn.functional.pad(gt, padding, mode='constant', value=0)    
+            self.origin_gt = gt
+            f = torch.fft.fft2(gt)
             real_gt, imag_gt = f.real, f.imag
             
         self.complex_gt = (
@@ -56,8 +58,8 @@ class ComplexData(Data):
           imag_gt / torch.norm(imag_gt, 'fro') * self.n
         )
         if self.magnitude:
-            self.phase = torch.atan(self.complex_gt[1] / self.complex_gt[0])
-            self.w_gt = torch.sqrt(self.complex_gt[0]**2 + self.complex_gt[1]**2)
+            self.phase = torch.angle(f/torch.norm(f, 'fro') * self.n)
+            self.w_gt = torch.abs(f/torch.norm(f, 'fro') * self.n)
         else:
             self.w_gt = self.complex_gt[0]
 

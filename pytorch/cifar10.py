@@ -4,6 +4,10 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import wandb
+
+from utils import experiments
+from expand_net import replace_linear_layers
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
@@ -24,7 +28,7 @@ classes = ('plane', 'car', 'bird', 'cat',
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-class MLP(torch.nn.Module):  # 继承 torch 的 Module
+class MLP(torch.nn.Module): 
     def __init__(self):
         super(MLP,self).__init__()  
         self.fc1 = torch.nn.Linear(32 * 32 * 3,64) 
@@ -41,7 +45,7 @@ class MLP(torch.nn.Module):  # 继承 torch 的 Module
         return x
     
 
-def train_cuda(running_loss, net, optimizer, criterion, epoch):
+def train(running_loss, net, optimizer, criterion, epoch):
     for i, data in enumerate(trainloader, 0):
         # get the inputs; data is a list of [inputs, labels]
         inputs, labels = data
@@ -59,9 +63,10 @@ def train_cuda(running_loss, net, optimizer, criterion, epoch):
         running_loss += loss.item()
         
         if i % 20 == 19: 
+            wandb.log({"loss": running_loss / (i+1)})
             print("Epoch:{}, Iteration:{}, Loss:{:.3f}".format(epoch + 1, i + 1, running_loss / (i+1)))
 
-def test_cuda(net):
+def test(net):
     correct = 0
     total = 0
     with torch.no_grad():
@@ -73,29 +78,49 @@ def test_cuda(net):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-    print('Accuracy of the network on the test images: %d %%' % (100 * correct / total))
+        wandb.log({"accuracy": 100 * correct / total})
+        print('Accuracy of the network on the test images: %d %%' % (100 * correct / total))
 
-def main(expand):
-    n_epochs = 20
-    mlp = MLP().to(device)
+def run_experiment(expand, d, lr, init_scale):
+    n_epochs=10
+    model = MLP().to(device)
     if expand:
         print('#'*30)
         print('Expanding Net!!!')
         print('#'*30)
-        from expand_net import replace_linear_layers
-        replace_linear_layers(mlp, 2, mode=expand, init_scale=0.1)
+        replace_linear_layers(model, d, mode=expand, init_scale=init_scale)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer_mlp = optim.Adam(mlp.parameters(), lr=1e-4)
+    optimizer_mlp = optim.Adam(model.parameters(), lr=lr)
     # optimizer_mlp = optim.SGD(mlp.parameters(), lr=0.01, momentum=0.9)
     for epoch in range(n_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
-        train_cuda(running_loss, mlp, optimizer_mlp, criterion, epoch)
-        test_cuda(mlp)
+        train(running_loss, model, optimizer_mlp, criterion, epoch)
+        test(model)
 
+def name(kwargs):
+    # short name for display on wandb
+    return f"expand_{kwargs['expand']}_d_{kwargs['d']}_init_{kwargs['init_scale']}_lr_{kwargs['lr']}"
+
+def main():
+    for i, kwargs in enumerate(experiments({
+            "expand":               ["complex", "real", False],
+            "d":                    [3],
+            "init_scale":           [1e-4],
+            "lr":                   [0.1]
+    })):
+        exp_name = name(kwargs)
+        config = {"comment": ""}
+        config.update(kwargs)
+        wandb.init(
+            project="expand-nets",
+            entity="complex-team",
+            name=exp_name,
+            config=config
+        )
+        run_experiment(**kwargs)
+        wandb.finish()
     print('Finished Training')
 
 if __name__=='__main__':
-    # EXPAND = False
-    EXPAND = 'complex'
-    main(EXPAND)
+    main()

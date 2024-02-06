@@ -6,16 +6,18 @@ import itertools
 from collections import defaultdict
 import pandas as pd
 import os
+from matplotlib import pyplot as plt
 
 from matrix_completion_utils import effective_rank, complex_matmul, process_phase_matrix
 from data import Data, ComplexData
 from models import MatrixMultiplier
+from utils import experiments
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train, 
           n, rank, depth, epochs=5001, use_wandb=True, seed=1, fourier=False):
-    model_size = n if not fourier else 2*n
+    model_size = n if not fourier else n*2
     model = MatrixMultiplier(depth, model_size, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
     dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True, fourier=fourier)
     observations_gt, indices = dataObj.generate_observations(n_train)
@@ -89,18 +91,34 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     print("Training complete")
     print(phase)
     print(phase_pred)
+    plot(dataObj.origin_gt, observations_gt, phase, pred, phase_pred)
     
     return df_dict
 
-def experiments(kwargs):
-    # Extract argument names and their corresponding value lists
-    arg_names = kwargs.keys()
-    value_lists = kwargs.values()
+def plot(orig, mag_gt, phase_gt, mag_pred, phase_pred):
+    # Reconstruct the signal from magnitude and phase
+    complex_signal = mag_gt * torch.exp(1j * phase_gt)
+    recovered_signal = torch.fft.ifftn(complex_signal).real
 
-    # Iterate over the Cartesian product of value lists
-    for values in itertools.product(*value_lists):
-        # Yield a dictionary mapping argument names to values
-        yield dict(zip(arg_names, values))
+    complex_signal_pred = mag_pred * torch.exp(1j * phase_pred)
+    recovered_signal_pred = torch.fft.ifftn(complex_signal_pred).real
+
+    # Visualization
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    axs[0].imshow(orig.cpu().detach().numpy(), cmap='gray')
+    axs[0].set_title('Original Signal')
+    axs[0].axis('off')
+
+    axs[1].imshow(recovered_signal.cpu().detach().numpy(), cmap='gray')
+    axs[1].set_title('Recovered Signal')
+    axs[1].axis('off')
+
+    axs[2].imshow(recovered_signal_pred.cpu().detach().numpy(), cmap='gray')
+    axs[2].set_title('Recovered Signal Pred')
+    axs[2].axis('off')
+
+    # plt.show()
+    plt.savefig("bla.png")
 
 def name(kwargs):
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)
@@ -112,9 +130,9 @@ def main():
             "diag_init_scale":      [0],
             "diag_noise_std":       [0],
             "step_size":            [1],
-            "n_train":              [1000],
+            "n_train":              [7000],
             "n":                    [50],
-            "rank":                 [1,2,3,4],
+            "rank":                 [1],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),

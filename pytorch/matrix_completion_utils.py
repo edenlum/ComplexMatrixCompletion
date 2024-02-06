@@ -156,19 +156,19 @@ def effective_rank(mat):
 
 def process_phase_matrix(phase_matrix):
   
-    phase_matrix = phase_matrix - phase_matrix[0,0]
+    # phase_matrix = phase_matrix - phase_matrix[0,0]
     # non_negative_matrix = torch.abs(phase_matrix)
 
     # Remove row phase
-    row_phases = non_negative_matrix[0:1, :]  # Row phases based on the first column after global phase removal
-    no_row_phase = non_negative_matrix - row_phases
+    # row_phases = non_negative_matrix[0:1, :]  # Row phases based on the first column after global phase removal
+    # no_row_phase = non_negative_matrix - row_phases
 
-    # Remove column phase
-    column_phases = no_row_phase[:, 0:1]  # Column phases based on the first row after row phase removal
-    no_column_phase = no_row_phase - column_phases
+    # # Remove column phase
+    # column_phases = no_row_phase[:, 0:1]  # Column phases based on the first row after row phase removal
+    # no_column_phase = no_row_phase - column_phases
 
-    # Adjust phase to be within (-pi, pi)
-    # adjusted_matrix = torch.mod(no_column_phase + np.pi, 2 * np.pi) - np.pi
+    # # Adjust phase to be within (-pi, pi)
+    # # adjusted_matrix = torch.mod(no_column_phase + np.pi, 2 * np.pi) - np.pi
 
     return phase_matrix 
 
