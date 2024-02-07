@@ -84,13 +84,14 @@ def test(net):
 
 def run_experiment(expand, d, lr, init_scale, diag_init_scale):
     n_epochs=10
-    model = MLP().to(device)
+    model = MLP()
     if expand:
         print('#'*30)
         print('Expanding Net!!!')
         print('#'*30)
         replace_linear_layers(model, d, mode=expand, init_scale=init_scale, diag_init_scale=diag_init_scale)
-
+    
+    model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer_mlp = optim.Adam(model.parameters(), lr=lr)
     # optimizer_mlp = optim.SGD(mlp.parameters(), lr=0.01, momentum=0.9)
