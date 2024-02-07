@@ -11,8 +11,8 @@ class MatrixMultiplier(nn.Module):
         self.out_features = out_features if out_features is not None else size
         self.size = self.out_features
 
-        init_scale = calc_init_scale(depth, size, init_scale, mode)
-        diag_noise_std = calc_init_scale(depth, size, diag_noise_std, mode, diag=True)
+        init_scale = calc_init_scale(depth, self.out_features, init_scale, mode)
+        diag_noise_std = calc_init_scale(depth, self.out_features, diag_noise_std, mode, diag=True)
     
         def weights(i, real_imag):
             rows = self.in_features if i==0 else self.out_features

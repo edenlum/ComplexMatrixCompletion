@@ -21,8 +21,11 @@ def replace_linear_layers(module, d, mode='real', init_scale=0.001, diag_init_sc
     for name, child in module.named_children():
         if isinstance(child, nn.Linear):
             # Replace with custom ExpandedLinear module
-            print(f"Original layer ")
-            setattr(module, name, ExpandedLinear(child.in_features, child.out_features, d, mode, child.bias, init_scale, diag_init_scale))
+            expanded_linear = ExpandedLinear(child.in_features, child.out_features, d, mode, child.bias, child.weight.std(), diag_init_scale)
+            print(f"Replacing {name} with ExpandedLinear")
+            print(f"Original norm, std: {child.weight.norm()}, {child.weight.std()}")
+            print(f"New norm, std: {expanded_linear.matrix_module().norm()}, {expanded_linear.matrix_module().std()}")
+            setattr(module, name, expanded_linear)
         else:
             replace_linear_layers(child, d, mode, init_scale)
 

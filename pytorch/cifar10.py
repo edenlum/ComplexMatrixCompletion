@@ -108,9 +108,9 @@ def main():
     for i, kwargs in enumerate(experiments({
             "expand":               ["complex", "real", False],
             "d":                    [3],
-            "init_scale":           [0],
+            "init_scale":           ["Original"],
             "lr":                   [1e-4],
-            "diag_init_scale":      [0.1],
+            "diag_init_scale":      [0],
     })):
         exp_name = name(kwargs)
         config = {"comment": ""}
