@@ -81,14 +81,14 @@ def test(net):
         wandb.log({"accuracy": 100 * correct / total})
         print('Accuracy of the network on the test images: %d %%' % (100 * correct / total))
 
-def run_experiment(expand, d, lr, init_scale):
+def run_experiment(expand, d, lr, init_scale, diag_init_scale):
     n_epochs=10
     model = MLP().to(device)
     if expand:
         print('#'*30)
         print('Expanding Net!!!')
         print('#'*30)
-        replace_linear_layers(model, d, mode=expand, init_scale=init_scale)
+        replace_linear_layers(model, d, mode=expand, init_scale=init_scale, diag_init_scale=diag_init_scale)
 
     criterion = nn.CrossEntropyLoss()
     optimizer_mlp = optim.Adam(model.parameters(), lr=lr)
@@ -100,14 +100,15 @@ def run_experiment(expand, d, lr, init_scale):
 
 def name(kwargs):
     # short name for display on wandb
-    return f"expand_{kwargs['expand']}_d_{kwargs['d']}_init_{kwargs['init_scale']}_lr_{kwargs['lr']}"
+    return f"expand_{kwargs['expand']}_d_{kwargs['d']}_init_{kwargs['init']}_diag_{kwargs['diag_init_scale']}_lr_{kwargs['lr']}"
 
 def main():
     for i, kwargs in enumerate(experiments({
             "expand":               ["complex", "real", False],
             "d":                    [3],
-            "init_scale":           [1e-4],
-            "lr":                   [0.1]
+            "init_scale":           [0],
+            "lr":                   [1e-4],
+            "diag_init_scale":      [0.1],
     })):
         exp_name = name(kwargs)
         config = {"comment": ""}
