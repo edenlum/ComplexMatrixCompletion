@@ -27,6 +27,7 @@ classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("Working on device: ", device)
 
 class MLP(torch.nn.Module): 
     def __init__(self):
@@ -100,7 +101,7 @@ def run_experiment(expand, d, lr, init_scale, diag_init_scale):
 
 def name(kwargs):
     # short name for display on wandb
-    return f"expand_{kwargs['expand']}_d_{kwargs['d']}_init_{kwargs['init']}_diag_{kwargs['diag_init_scale']}_lr_{kwargs['lr']}"
+    return f"expand_{kwargs['expand']}_d_{kwargs['d']}_init_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_lr_{kwargs['lr']}"
 
 def main():
     for i, kwargs in enumerate(experiments({
