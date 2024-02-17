@@ -10,6 +10,7 @@ import os
 from matrix_completion_utils import effective_rank, complex_matmul
 from data import Data, ComplexData
 from models import MatrixMultiplier
+from utils import experiments
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -139,16 +140,6 @@ def run(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train,
     # df_dict = train(model_imag, step_size, epochs, observations_gt[1], indices, use_wandb, mode, n)
 
     return df_dict
-
-def experiments(kwargs):
-    # Extract argument names and their corresponding value lists
-    arg_names = kwargs.keys()
-    value_lists = kwargs.values()
-
-    # Iterate over the Cartesian product of value lists
-    for values in itertools.product(*value_lists):
-        # Yield a dictionary mapping argument names to values
-        yield dict(zip(arg_names, values))
 
 def name(kwargs):
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)

@@ -103,12 +103,12 @@ def parse_results(directory_path, diag_init, mode='real'):
     
     return results
 
-def start_direction(depth, size, diag_init_scale, mode, diag_noise_std):
+def start_direction(depth, size, diag_init_scale, mode, out_features=None):
     real = np.cos((np.pi/2) / depth)
     imag = np.sin((np.pi/2) / depth)
 
     diag_init_scale = calc_init_scale(depth, size, diag_init_scale, mode, diag=True)
-    identity = torch.eye(size) * diag_init_scale
+    identity = torch.eye(size, out_features) * diag_init_scale
     if mode == "complex" or mode == "magnitude":
         return (identity * real,
                 identity * imag)
@@ -118,9 +118,9 @@ def start_direction(depth, size, diag_init_scale, mode, diag_noise_std):
     else:
         return (identity, 0)
 
-def noisy_diag(diag_noise_std, size):
-    noisy_diag = torch.zeros(size, size)
-    for i in range(size):
+def noisy_diag(diag_noise_std, rows, cols):
+    noisy_diag = torch.zeros(rows, cols)
+    for i in range(min(rows, cols)):
         noisy_diag[i, i] = torch.randn(1) * diag_noise_std
     return noisy_diag
 
@@ -131,7 +131,6 @@ def calc_init_scale(depth, n, e2e_scale, mode, diag=False):
     if diag:
         return (e2e_scale * n**(1/2))**(1/depth)
     return (e2e_scale / ((n**(1/2)) ** (depth - 1)))**(1/depth)
-
     
 def conjugate_transpose(w):
     if isinstance(w, tuple):
@@ -154,6 +153,24 @@ def effective_rank(mat):
     normalized_singular_values = S / torch.sum(S)
     effective_rank = torch.exp(-torch.sum(normalized_singular_values * torch.log(normalized_singular_values)))
     return effective_rank.item()
+
+def process_phase_matrix(phase_matrix):
+  
+    # phase_matrix = phase_matrix - phase_matrix[0,0]
+    # non_negative_matrix = torch.abs(phase_matrix)
+
+    # Remove row phase
+    # row_phases = non_negative_matrix[0:1, :]  # Row phases based on the first column after global phase removal
+    # no_row_phase = non_negative_matrix - row_phases
+
+    # # Remove column phase
+    # column_phases = no_row_phase[:, 0:1]  # Column phases based on the first row after row phase removal
+    # no_column_phase = no_row_phase - column_phases
+
+    # # Adjust phase to be within (-pi, pi)
+    # # adjusted_matrix = torch.mod(no_column_phase + np.pi, 2 * np.pi) - np.pi
+
+    return phase_matrix 
 
 
 if __name__=='__main__':

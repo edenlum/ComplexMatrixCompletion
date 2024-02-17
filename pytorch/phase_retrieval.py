@@ -6,17 +6,20 @@ import itertools
 from collections import defaultdict
 import pandas as pd
 import os
+from matplotlib import pyplot as plt
 
-from matrix_completion_utils import effective_rank, complex_matmul
+from matrix_completion_utils import effective_rank, complex_matmul, process_phase_matrix
 from data import Data, ComplexData
 from models import MatrixMultiplier
+from utils import experiments
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train, 
-          n, rank, depth, epochs=5001, use_wandb=True, seed=1):
-    model = MatrixMultiplier(depth, n, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
-    dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True)
+          n, rank, depth, epochs=5001, use_wandb=True, seed=1, fourier=False):
+    model_size = n if not fourier else n*2
+    model = MatrixMultiplier(depth, model_size, 'magnitude', init_scale, diag_init_scale, diag_noise_std)
+    dataObj = ComplexData(n=n, rank=rank, seed=seed, magnitude=True, fourier=fourier)
     observations_gt, indices = dataObj.generate_observations(n_train)
     
     np.random.seed(seed)
@@ -25,6 +28,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     model.to(device)
     real_gt, imag_gt = observations_gt[0].to(device), observations_gt[1].to(device)
     phase = dataObj.phase.to(device)
+    phase = process_phase_matrix(phase)
     if use_wandb:
         wandb.watch(model)
         wandb.config["data_eff_rank"] = effective_rank(real_gt + 1j*imag_gt)
@@ -35,10 +39,12 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
     for epoch in range(epochs):
         optimizer.zero_grad()
 
+
         pred, imag = model()
         phase_pred = torch.abs(torch.atan(pred/imag))
         phase = torch.abs(torch.atan(real_gt/imag_gt))
         pred_flat, obs_flat = pred.flatten(), real_gt.flatten()
+        
         train_loss = criterion(pred_flat[indices], obs_flat[indices])
         test_indices = np.setdiff1d(np.arange(obs_flat.nelement()), indices)
         val_loss = criterion(pred_flat[test_indices], obs_flat[test_indices])
@@ -72,7 +78,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                   "effective_rank": eff_rank,
                   "imag_eff_rank": effective_rank(imag),
                   "standard_deviation": torch.std(pred).item(),
-                  "fro_norm/size": torch.norm(pred).item()/n,
+                  "fro_norm/size": torch.norm(pred).item()/model_size,
                   "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
                 })
                   
@@ -82,7 +88,7 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
                     df_dict[var].append(eval(var).item())
                 df_dict['eff_rank'].append(eff_rank)
                 df_dict['standard_deviation'].append(torch.std(pred).item()),
-                df_dict['fro_norm/size'].append(torch.norm(pred).item()/n)
+                df_dict['fro_norm/size'].append(torch.norm(pred).item()/model_size)
       
         if epoch % 100 == 0:
             print(f'Epoch {epoch}/{epochs}, \
@@ -95,44 +101,65 @@ def train(init_scale, diag_init_scale, diag_noise_std, step_size, n_train,
 
     print("IMAG PRED:", imag)
     print("IMAG GT:  ", imag_gt)
+    print(phase)
+    print(phase_pred)
+    plot(dataObj.origin_gt, observations_gt, phase, pred, phase_pred)
 
     
     return df_dict
 
-def experiments(kwargs):
-    # Extract argument names and their corresponding value lists
-    arg_names = kwargs.keys()
-    value_lists = kwargs.values()
+def plot(orig, mag_gt, phase_gt, mag_pred, phase_pred):
+    # Reconstruct the signal from magnitude and phase
+    complex_signal = mag_gt * torch.exp(1j * phase_gt)
+    recovered_signal = torch.fft.ifftn(complex_signal).real
 
-    # Iterate over the Cartesian product of value lists
-    for values in itertools.product(*value_lists):
-        # Yield a dictionary mapping argument names to values
-        yield dict(zip(arg_names, values))
+    complex_signal_pred = mag_pred * torch.exp(1j * phase_pred)
+    recovered_signal_pred = torch.fft.ifftn(complex_signal_pred).real
+
+    # Visualization
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    axs[0].imshow(orig.cpu().detach().numpy(), cmap='gray')
+    axs[0].set_title('Original Signal')
+    axs[0].axis('off')
+
+    axs[1].imshow(recovered_signal.cpu().detach().numpy(), cmap='gray')
+    axs[1].set_title('Recovered Signal')
+    axs[1].axis('off')
+
+    axs[2].imshow(recovered_signal_pred.cpu().detach().numpy(), cmap='gray')
+    axs[2].set_title('Recovered Signal Pred')
+    axs[2].axis('off')
+
+    # plt.show()
+    plt.savefig("bla.png")
 
 def name(kwargs):
     print('#'*100 + f"\n{kwargs}\n" + "#"*100)
-    return f"{kwargs['seed']}_depth_{kwargs['depth']}_noise_{kwargs['init_scale']}_diag_{kwargs['diag_init_scale']}_diagnoise_{kwargs['diag_noise_std']}_lr_{kwargs['step_size']}"
+    return f"Magnitude rank {kwargs['rank']}"
             
 def main():
     for i, kwargs in enumerate(experiments({
             "init_scale":           [1e-4],
             "diag_init_scale":      [0],
             "diag_noise_std":       [0],
-            "step_size":            [3],
+            "step_size":            [1],
             "n_train":              [7000],
-            "n":                    [100],
-            "rank":                 [5],
+            "n":                    [50],
+            "rank":                 [1],
             "depth":                [4],
             "use_wandb":            [True],
             "seed":                 np.arange(1),
+            "fourier":              [True]
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:
+            config = {"comment": "Ignore row and col phase and sign"}
+            config.update(kwargs)
             wandb.init(
                 project="ComplexMatrixCompletion",
                 entity="complex-team",
                 name=exp_name,
-                config=kwargs
+                config=config
             )
             train(**kwargs)
             wandb.finish()
