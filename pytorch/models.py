@@ -25,15 +25,12 @@ class MatrixMultiplier(nn.Module):
     def forward(self):
         if self.mode == "quasi_complex":
             return self._quasi_complex_forward()
-        elif self.mode == "magnitude":
-            return self._magnitude_forward()
         
         w_e2e = self.matrices[0]
-
         for w in self.matrices[1:]:
             w_e2e = complex_matmul(w_e2e, w)
 
-        return w_e2e[0] if self.mode == "complex" else w_e2e
+        return w_e2e 
     
     def _quasi_complex_forward(self):
         real_e2e, imag_e2e = self.matrices[0]
@@ -42,17 +39,7 @@ class MatrixMultiplier(nn.Module):
             real_e2e = torch.matmul(real, real_e2e)
             imag_e2e = torch.matmul(imag, imag_e2e)
 
-        return real_e2e - imag_e2e
-    
-    def _magnitude_forward(self):
-        w_e2e = self.matrices[0]
-
-        for w in self.matrices[1:]:
-            w_e2e = complex_matmul(w, w_e2e)
-
-        magnitude = torch.sqrt(w_e2e[0]**2 + w_e2e[1]**2)
-        phase = torch.atan(w_e2e[1] / w_e2e[0])
-        return magnitude, phase
+        return real_e2e, imag_e2e
 
     def calc_real_parts(self):
         a, c = self.real_matrices
