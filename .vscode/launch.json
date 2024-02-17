@@ -13,6 +13,22 @@
             "program": "pytorch/matrix_completion.py",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "expand_net",
+            "type": "python",
+            "request": "launch",
+            "program": "pytorch/expand_net.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "cifar10",
+            "type": "python",
+            "request": "launch",
+            "program": "pytorch/cifar10.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }

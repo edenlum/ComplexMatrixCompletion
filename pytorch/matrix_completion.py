@@ -16,9 +16,14 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def log_results(epoch, model_output, pred, train_loss, val_loss, use_wandb, mode, df_dict, n):
     _, S, _ = torch.svd(pred)
     eff_rank = effective_rank(pred)
+    
+    wandb.log({
+        "epoch": epoch,
+        "singular_values": {i: s for i, s in enumerate(S.tolist()[:10])}
+    })
 
     # log complex singular values
-    if mode=='complex':
+    if mode=='complex' or mode=='magnitude':
         _, S_complex, _ = torch.svd(post_process(model_output, "complex"))
         wandb.log({
             "epoch": epoch,
@@ -60,7 +65,7 @@ def post_process(pred, mode):
     elif mode == "quasi_complex":
         return pred[0] - pred[1]
     elif mode == "magnitude":
-        return torch.sqrt(pred[0]**2 + pred[1]**2)
+        return torch.sqrt(pred[0]**2 + pred[1]**2 + 1e-8)
     else:
         return pred
 
@@ -79,10 +84,10 @@ def calc_losses(prediction, ground_truth, indices, criterion):
     return train_loss, val_loss
 
 def custom_data():
-    real_part = torch.tensor([[0, 1],[-1, 0]], dtype=torch.float32)
-    imag_part = torch.tensor([[1, 0], [0, 1]], dtype=torch.float32)
-    indices = np.arange(3)
-    return (real_part, imag_part), indices
+    real_part = torch.tensor([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0],[0, 0, 0, 0]], dtype=torch.float32)
+    # imag_part = torch.tensor([[1, 0], [0, 1]], dtype=torch.float32)
+    indices = np.array([0, 1, 2, 4, 5, 6, 8, 9, 10])
+    return real_part, indices
 
 def train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n):
     criterion = nn.MSELoss()
@@ -93,7 +98,7 @@ def train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n
 
         output = model()
         pred = post_process(output, mode)
-        train_loss, val_loss = calc_losses(output, observations_gt, indices, criterion)
+        train_loss, val_loss = calc_losses(pred, observations_gt, indices, criterion)
 
         train_loss.backward()
         optimizer.step()
@@ -105,24 +110,30 @@ def train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n
     
     print("Training complete")
     print(output)
+    if mode == "complex" or mode == "magnitude":
+        print("Effective rank complex model: ", effective_rank(post_process(output, 'complex')))
+    print("Effective rank magnitude model: ", effective_rank(pred))
+    print("Effective rank real data: ", effective_rank(observations_gt))
     return df_dict
 
 def run(init_scale, diag_init_scale, diag_noise_std, step_size, mode, n_train, 
-          n, rank, depth, epochs=5001, use_wandb=True, seed=1, complex_data=False):
+          n, rank, depth, epochs=30001, use_wandb=True, seed=1, complex_data=False, magnitude_data=False):
     
     np.random.seed(seed)
     torch.manual_seed(seed)
 
     model = MatrixMultiplier(depth, n, mode, init_scale, diag_init_scale, diag_noise_std).to(device)
     dataObj = ComplexData(n=n, rank=rank, seed=seed) if complex_data else Data(n=n, rank=rank, seed=seed)
-    observations_gt, indices = custom_data() #dataObj.generate_observations(n_train)
-    print(observations_gt)
+    observations_gt, indices = dataObj.generate_observations(n_train)
+    if magnitude_data:
+        observations_gt = post_process(observations_gt, 'magnitude')
+    # print(observations_gt)
     # model_real = MatrixMultiplier(depth, n, 'real', init_scale, diag_init_scale, diag_noise_std).to(device)
     # model_imag = MatrixMultiplier(depth, n, 'real', init_scale, diag_init_scale, diag_noise_std).to(device)
 
-    # if use_wandb:
-        # wandb.watch(model)
-        # wandb.config["data_eff_rank"] = effective_rank(post_process(observations_gt, mode))
+    if use_wandb:
+        wandb.watch(model)
+        wandb.config["data_eff_rank"] = effective_rank(observations_gt)
 
     df_dict = train(model, step_size, epochs, observations_gt, indices, use_wandb, mode, n)
     # df_dict = train(model_imag, step_size, epochs, observations_gt[1], indices, use_wandb, mode, n)
@@ -145,18 +156,19 @@ def name(kwargs):
             
 def main():
     for i, kwargs in enumerate(experiments({
-            "init_scale":           [0],
-            "diag_init_scale":      [1e-4],
+            "init_scale":           [5e-5],
+            "diag_init_scale":      [0],
             "diag_noise_std":       [0],
-            "step_size":            [0.1],
-            "mode":                 ['complex'],
-            "n_train":              [3],
-            "n":                    [2],
-            "rank":                 [1],
-            "depth":                [4],
+            "step_size":            [0.5],
+            "mode":                 ['magnitude'],
+            "n_train":              [3000],
+            "n":                    [100],
+            "rank":                 [4],
+            "depth":                [5],
             "use_wandb":            [True],
-            "seed":                 np.arange(1),
-            "complex_data":         [True]
+            "seed":                 np.arange(10),
+            "complex_data":         [True],
+            "magnitude_data":       [True]
     })):
         exp_name = name(kwargs)
         if kwargs['use_wandb']:
